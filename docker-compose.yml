@@ -1,17 +1,23 @@
-# Запуск: bash deploy.sh <домен>  (или вручную: .env с DOMAIN=..., server/.env, затем docker compose up -d --build)
+# Запуск: bash deploy.sh <домен>
+# Вручную: .env с DOMAIN=..., server/.env, затем
+#   docker compose --profile caddy up -d --build   (порты 80/443 свободны, HTTPS через Caddy)
+#   docker compose up -d --build                    (есть свой nginx: сервер слушает 127.0.0.1:${SERVER_PORT:-8787})
 services:
   server:
     build: ./server
     env_file: ./server/.env
     environment:
       DATA_DIR: /data
+    ports:
+      - "127.0.0.1:${SERVER_PORT:-8787}:8080"
     volumes:
       - evisa-data:/data
     restart: unless-stopped
   caddy:
     image: caddy:2
+    profiles: ["caddy"]
     environment:
-      DOMAIN: ${DOMAIN:?DOMAIN is not set - create .env with DOMAIN=your.domain}
+      DOMAIN: ${DOMAIN:-localhost}
     ports:
       - "80:80"
       - "443:443"
