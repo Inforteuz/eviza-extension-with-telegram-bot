@@ -2,9 +2,15 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
       PYTHON_BIN: python
     steps:
@@ -29,3 +35,36 @@ jobs:
         run: |
           npx --prefix e2e playwright-core install --with-deps chromium
           npm test --prefix e2e
+      - name: Deploy scripts
+        run: for f in deploy.sh deploy/*.sh; do bash -n "$f"; done
+
+  # Only a push to the production branch that passed every test reaches the server.
+  # The key can run nothing but /usr/local/sbin/evisa-update (see deploy/setup-autodeploy.sh).
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/claude/affectionate-archimedes-yzozwx'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Deploy to the server
+        env:
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          PORT: ${{ secrets.DEPLOY_PORT }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -z "$HOST" ] || [ -z "$SSH_KEY" ] || [ -z "$KNOWN_HOSTS" ]; then
+            echo "::warning title=Deploy skipped::DEPLOY_HOST, DEPLOY_SSH_KEY, DEPLOY_KNOWN_HOSTS secrets are not set. Run deploy/setup-autodeploy.sh on the server."
+            exit 0
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key -p "${PORT:-22}" \
+            -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=30 -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+            "evisa-deploy@$HOST" "deploy $GITHUB_SHA"

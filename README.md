@@ -47,6 +47,28 @@ bash deploy.sh evisa.example.uz
 
 Если порты 80/443 свободны, HTTPS обеспечивает контейнер Caddy. Если на сервере уже работает nginx, скрипт его не трогает. Он добавляет отдельный сайт `/etc/nginx/sites-available/evisa-<домен>.conf` с проксированием на `127.0.0.1:8787` и получает сертификат через certbot. Если домен уже обслуживает другой сайт nginx, скрипт по умолчанию останавливается. Тогда есть три варианта: разместить сервис на том же домене по пути (`bash deploy.sh example.uz/evisa`), взять другой поддомен или заменить сайт (`REPLACE_NGINX_SITE=1`). В варианте с путём в существующий HTTPS-блок добавляется одна строка `include /etc/nginx/snippets/evisa-<домен>.conf;`. Остальной сайт и его сертификат не меняются. Перед изменением делается копия в `/root/nginx-backup/`. Если `nginx -t` падает, файл восстанавливается автоматически.
 
+### Автодеплой через GitHub Actions
+
+После каждого push в `claude/affectionate-archimedes-yzozwx` workflow `CI` прогоняет unit- и браузерные тесты. Если всё зелёное, джоб `deploy` заходит на сервер по SSH и обновляет его. На сервер попадает ровно тот коммит, который прошёл тесты.
+
+Один раз на сервере (после первого `deploy.sh`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Inforteuz/eviza-extension-with-telegram-bot/claude/affectionate-archimedes-yzozwx/deploy/setup-autodeploy.sh -o setup-autodeploy.sh
+bash setup-autodeploy.sh
+```
+
+Скрипт печатает три значения. Их нужно добавить в GitHub → Settings → Secrets and variables → Actions: `DEPLOY_HOST`, `DEPLOY_KNOWN_HOSTS`, `DEPLOY_SSH_KEY` (и `DEPLOY_PORT`, если SSH не на 22). Затем Actions → CI → Run workflow.
+
+Безопасность:
+* Отдельный пользователь `evisa-deploy` без пароля. Его ключ (`restrict,command=...`) может запустить только `/usr/local/sbin/evisa-update`: ни shell, ни проброса портов, ни других команд через sudo.
+* `evisa-update` принимает только `check` или `deploy <40-hex коммит>` и проверяет, что коммит есть в ветке. Более старый коммит поверх нового не ставится, два деплоя одновременно не идут (`flock`).
+* Хост-ключ сервера закреплён (`StrictHostKeyChecking=yes`). PR из форков секреты не получают.
+* Репозиторий публичный, поэтому в лог Actions попадают только строки шагов (`==>`, `[!]`, `[x]`). Полный лог лежит на сервере в `/var/log/evisa-deploy/`.
+* Повторный запуск `setup-autodeploy.sh` меняет ключ: старый перестаёт работать.
+
+Без секретов джоб `deploy` пропускается с предупреждением. Ручной `bash deploy.sh` продолжает работать как раньше.
+
 ### Docker вручную
 
 ```bash

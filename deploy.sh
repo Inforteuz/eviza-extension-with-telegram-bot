@@ -17,7 +17,8 @@ BACKUP_ROOT="${BACKUP_ROOT:-/root/nginx-backup}"
 say(){ printf '\n\033[1;32m==>\033[0m %s\n' "$*"; }
 warn(){ printf '\n\033[1;33m[!]\033[0m %s\n' "$*"; }
 die(){ printf '\n\033[1;31m[x]\033[0m %s\n' "$*" >&2; exit 1; }
-ask(){ local prompt="$1" secret="${2:-}" value; if [ -n "$secret" ]; then read -rsp "$prompt" value </dev/tty; echo >&2; else read -rp "$prompt" value </dev/tty; fi; printf '%s' "$value"; }
+# NONINTERACTIVE=1 (GitHub auto-deploy): no prompts; missing required values stop the run.
+ask(){ local prompt="$1" secret="${2:-}" value; [ -z "${NONINTERACTIVE:-}" ] || return 0; if [ -n "$secret" ]; then read -rsp "$prompt" value </dev/tty; echo >&2; else read -rp "$prompt" value </dev/tty; fi; printf '%s' "$value"; }
 
 [ "$(id -u)" = 0 ] || die "Skriptni root sifatida ishga tushiring."
 
@@ -29,7 +30,13 @@ command -v git >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq
 say "Kod: $REPO ($BRANCH) -> $DIR"
 if [ -d "$DIR/.git" ]; then
   git -C "$DIR" fetch -q origin "$BRANCH"
-  git -C "$DIR" checkout -q -B "$BRANCH" "origin/$BRANCH"
+  REF="origin/$BRANCH"
+  # Auto-deploy pins the exact commit that passed CI.
+  if [ -n "${DEPLOY_SHA:-}" ]; then
+    git -C "$DIR" merge-base --is-ancestor "$DEPLOY_SHA" "origin/$BRANCH" || die "$DEPLOY_SHA $BRANCH tarmog'ida yo'q."
+    REF="$DEPLOY_SHA"
+  fi
+  git -C "$DIR" checkout -q -B "$BRANCH" "$REF"
 else
   git clone -q -b "$BRANCH" "$REPO" "$DIR"
 fi
@@ -78,6 +85,7 @@ say "Bot: @$BOT_USERNAME"
 # ---- Administrator Telegram ID: taken from the latest private message to the bot ----
 ADMINS="${ADMIN_IDS:-$(get_env ADMIN_IDS)}"
 if [ -z "$ADMINS" ]; then
+  [ -z "${NONINTERACTIVE:-}" ] || die "ADMIN_IDS bo'sh. deploy.sh ni bir marta serverda qo'lda ishga tushiring."
   docker compose stop server >/dev/null 2>&1 || true
   curl -fsS "https://api.telegram.org/bot$TOKEN/deleteWebhook" >/dev/null || true
   echo; echo "Telegram'da @$BOT_USERNAME botiga /start yozing (administrator akkauntidan), so'ng shu yerda Enter bosing."
