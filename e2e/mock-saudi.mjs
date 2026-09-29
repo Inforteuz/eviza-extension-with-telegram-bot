@@ -31,7 +31,8 @@ const parseForm=request=>{
 };
 
 export function createMockSaudi(){
- const site={loggedIn:true,apps:new Map(),groups:new Map(),payClicks:0,next:260929000,posts:[],rateLimited:false};
+ // latency: {path: ms} delays page loads like the real site (a click only starts the navigation).
+ const site={loggedIn:true,apps:new Map(),groups:new Map(),payClicks:0,next:260929000,posts:[],rateLimited:false,latency:{}};
  const groupHeader=g=>g?`<p>Group Name : ${esc(g)}</p>`:'';
  const reviewLines=a=>{
   const p=a.personal,q=a.passport;
@@ -86,7 +87,7 @@ ${a.group?`<a id="btnAddMoreToGroup" href="/Visa/PersonalInfo?gName=${encodeURIC
   if(path==='/Visa/Index'||path==='/')return route.fulfill(html(routes.index()));
   if(path==='/Visa/PersonalInfo'){
    const group=url.searchParams.get('gName')||'';
-   if(method==='GET')return route.fulfill(html(routes.personal(group)));
+   if(method==='GET'){if(site.latency[path])await new Promise(r=>setTimeout(r,site.latency[path]));return route.fulfill(html(routes.personal(group)))}
    const {fields,files}=parseForm(request);site.posts.push({path,fields,files});
    if(!fields.Q1||!fields.FirstName||!files.Picture?.jpeg)return route.fulfill(html(routes.personal(group).replace('<form','<p class="error">Please complete all required fields.</p><form')));
    const id=randomUUID(),a={id,number:String(++site.next),group,stage:'passport',portrait:files.Picture,personal:{...fields,BirthDate:fields.BirthDate},passport:{}};

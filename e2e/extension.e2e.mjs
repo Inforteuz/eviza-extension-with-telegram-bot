@@ -74,6 +74,8 @@ async function setup(t){
 
 test('pair via Telegram, read passports, fill individual applications and a group up to payment',{timeout:240000},async t=>{
  const f=await setup(t);const {panel,mock,storage}=f;
+ // The real site takes seconds to open the personal form after “Apply For Individual”.
+ mock.site.latency['/Visa/PersonalInfo']=2500;
 
  // 1. Pair through the bot deep link.
  await panel.fill('#serverUrl',f.serverUrl);

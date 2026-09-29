@@ -105,7 +105,7 @@ docker compose logs --tail 20 server     # «AI: gemini», «OpenCV: OK»
 
 ```bash
 node extension/scripts/pack.mjs --server https://evisa.example.uz
-# → extension/dist/evisa-auto-filler-1.0.0.zip (адрес сервера уже вшит)
+# → extension/dist/evisa-auto-filler-1.0.1.zip (адрес сервера уже вшит)
 ```
 
 Архив загружается в Chrome Web Store (unlisted) или раздаётся напрямую. Ссылку на него укажите в `EXTENSION_URL`, чтобы бот показывал её пользователям.

@@ -3,6 +3,8 @@ import {Attention} from './errors.js';
 import {visaDiagnostics} from './diagnostics.js';
 export {Attention} from './errors.js';
 const ORIGIN='https://visa.visitsaudi.com';
+// The real site can take many seconds to save a form; a navigation wait ends as soon as the page changes.
+export const NAV_TIMEOUT=45000;
 const draftPattern=/^\/Visa\/(PersonalInfo|PassportInfo)\/[0-9a-f-]{36}$/i;
 const insurancePattern=/^\/Insurance\/ChooseInsurance\/[0-9a-f-]{36}$/i;
 const remainingPattern=/^\/(Insurance\/ChooseInsurance|Visa\/(Terms|Review))\/[0-9a-f-]{36}$/i;
@@ -102,14 +104,14 @@ export async function fillInsurance(page){
  const text=await page.locator('body').innerText();
  if(!/FEE OF\s*\(95\.00 SAR\)/i.test(text))throw new Attention('needs_review','Sug‘urta narxi yoki sharti o‘zgargan. Arizani tekshiring.','insurance');
  await setChoice(page.locator('#chkInsurance'),true);
- await next.click();try{await page.waitForURL(url=>url.href!==original,{timeout:15000,waitUntil:'domcontentloaded'})}catch{}
+ await next.click();try{await page.waitForURL(url=>url.href!==original,{timeout:NAV_TIMEOUT,waitUntil:'domcontentloaded'})}catch{}
  if(page.url()===original)throw new Attention('needs_review','Sug‘urta bosqichi keyingi sahifaga o‘tmadi.','insurance');
 }
 const termsCheckbox=page=>page.getByRole('checkbox',{name:/^I HAVE READ AND AGREE ALL THE ABOVE TERMS AND CONDITIONS\.?$/i});
 export async function fillTerms(page){
  const original=page.url();await setChoice(termsCheckbox(page),true);
  await page.getByRole('button',{name:'Next',exact:true}).click();
- try{await page.waitForURL(url=>url.href!==original,{timeout:15000,waitUntil:'domcontentloaded'})}catch{}
+ try{await page.waitForURL(url=>url.href!==original,{timeout:NAV_TIMEOUT,waitUntil:'domcontentloaded'})}catch{}
  if(page.url()===original)throw new Attention('needs_review','Shartlar sahifasi keyingi bosqichga o‘tmadi.','terms');
 }
 export function verifyApplicantReview(text,a,applicationNumber){
@@ -175,17 +177,19 @@ export async function prepareVisa(page,job,portraitPath,state,checkpoint,onProgr
   if(started&&started!=='editing')throw new Attention('needs_review','Oldingi urinish boshlangan. Yangi ariza yaratishdan oldin Saudi kabinetidagi qoralamani tekshiring.');
   state.set('started:'+job.id,'editing');await page.getByRole('link',{name:'Apply For Individual',exact:true}).click();
  }
+ // A click only starts the navigation; the real site takes seconds to open the form.
+ try{await page.waitForURL(u=>/^\/Visa\/(PersonalInfo|PassportInfo)(\/|$)/i.test(u.pathname),{timeout:NAV_TIMEOUT})}catch{}
  if(page.url().includes('/PersonalInfo')){
   await onProgress({step:'personal',note:'Shaxsiy ma’lumotlar, sana va portret kiritilmoqda.'});
   await fillPersonal(page,job.data,portraitPath);state.set('started:'+job.id,'saving');await page.getByRole('button',{name:'Next',exact:true}).click();
-  try{await page.waitForURL('**/Visa/PassportInfo/*',{timeout:15000})}catch{throw new Attention('needs_review','Shaxsiy ma’lumotlar sahifasini tekshiring. Yangi ariza yaratilmaydi.');}
+  try{await page.waitForURL('**/Visa/PassportInfo/*',{timeout:NAV_TIMEOUT})}catch{throw new Attention('needs_review','Shaxsiy ma’lumotlar sahifasini tekshiring. Yangi ariza yaratilmaydi.');}
  }
  if(page.url().includes('/PassportInfo/')){
   const body=await page.locator('body').innerText();const applicationNumber=body.match(/Application No\.:\s*(\d+)/)?.[1];
   if(!applicationNumber||!validDraft(page.url()))throw new Attention('needs_review','Rasmiy qoralama raqami o‘qilmadi.','passport');
   const progress={officialUrl:page.url(),applicationNumber,step:'passport'};state.set('draft:'+job.id,JSON.stringify(progress));await checkpoint(progress);
   await fillPassport(page,job.data);const passportUrl=page.url();await page.getByRole('button',{name:'Next',exact:true}).click();
-  try{await page.waitForURL(url=>url.href!==passportUrl,{timeout:15000,waitUntil:'domcontentloaded'})}catch{}
+  try{await page.waitForURL(url=>url.href!==passportUrl,{timeout:NAV_TIMEOUT,waitUntil:'domcontentloaded'})}catch{}
   const blocking=activeVisaMessage(await page.locator('body').innerText());if(blocking)throw new Attention('needs_review',blocking,'passport');
   if(new URL(page.url()).origin===ORIGIN)state.set('next-route:'+job.id,new URL(page.url()).pathname);
   if(remainingPattern.test(new URL(page.url()).pathname))return finishApplication();

@@ -1,4 +1,4 @@
-import {Attention,waitForLogin,fillPersonal,fillPassport,fillInsurance,fillTerms,activeVisaMessage,verifyApplicantReview} from './visa.js';
+import {Attention,NAV_TIMEOUT,waitForLogin,fillPersonal,fillPassport,fillInsurance,fillTerms,activeVisaMessage,verifyApplicantReview} from './visa.js';
 import {assertGroupName,addMemberControl,verifyGroupPayment} from './group-review.js';
 const ORIGIN='https://visa.visitsaudi.com';
 
@@ -26,7 +26,7 @@ export async function prepareGroup(page,group,state,{progress,checkpoint,portrai
   await button.click();const field=page.locator('#txtGroupName');await field.fill('');await field.pressSequentially(group.name);
   if(await field.inputValue()!==group.name)throw new Attention('needs_review','Guruh nomi saytga saqlanmadi.','group');
   await checkpoint({...cp,phase:'creating',name:group.name});
-  const before=page.url();await page.locator('#btnCreateGroup').click();try{await page.waitForURL(url=>url.href!==before,{timeout:15000,waitUntil:'domcontentloaded'})}catch{}
+  const before=page.url();await page.locator('#btnCreateGroup').click();try{await page.waitForURL(url=>url.href!==before,{timeout:NAV_TIMEOUT,waitUntil:'domcontentloaded'})}catch{}
   if(page.url()!==before){cp.entryUrl=page.url();cp.phase='collect';cp.name=group.name;cp.members={};await checkpoint(cp)}
  }
  if(group.job_type==='group_probe'||!group.members.length){const report=await observeGroup(page);state.set('group-report:'+group.id,JSON.stringify(report));throw new Attention('needs_input','“'+group.name+'” guruhi ochildi. Pasport ma’lumotlarini tasdiqlab guruhni boshlang.','group');}
@@ -48,7 +48,7 @@ export async function prepareGroup(page,group,state,{progress,checkpoint,portrai
    await progress({step:'group',note:`${i}/${group.members.length} tayyor. Save & Add Applicant orqali ${i+1}-odamga o‘tilmoqda.`});
    const locator=/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(control.id||'')?page.locator('#'+control.id):page.getByRole(control.tag==='a'?'link':'button',{name:control.text,exact:true});
    if(await locator.count()!==1)throw new Attention('needs_review','Arizachi qo‘shish tugmasi bir nechta.','group');
-   const before=page.url();await locator.click();try{await page.waitForURL(u=>u.href!==before,{timeout:15000,waitUntil:'domcontentloaded'})}catch{}
+   const before=page.url();await locator.click();try{await page.waitForURL(u=>u.href!==before,{timeout:NAV_TIMEOUT,waitUntil:'domcontentloaded'})}catch{}
    const next=await observeGroup(page);state.set('group-report:'+group.id,JSON.stringify(next));assertGroupName(next.text,group.name);
    if(!new URL(page.url()).pathname.startsWith('/Visa/PersonalInfo'))throw new Attention('needs_review','Keyingi arizachining shaxsiy formasi ochilmadi.','group');
    Object.assign(saved,{currentUrl:page.url(),phase:'personal'});cp.members[member.id]=saved;cp.currentUrl=page.url();delete cp.adding;await checkpoint(cp);
@@ -59,14 +59,14 @@ export async function prepareGroup(page,group,state,{progress,checkpoint,portrai
    await fillPersonal(page,member.data,await portraitFor(member));
    Object.assign(saved,{phase:'saving_personal',currentUrl:page.url(),confirmation:member.group_confirmation});cp.members[member.id]=saved;await checkpoint(cp);
    await page.getByRole('button',{name:'Next',exact:true}).click();
-   try{await page.waitForURL('**/Visa/PassportInfo/*',{timeout:15000,waitUntil:'domcontentloaded'})}catch{state.set('group-report:'+group.id,JSON.stringify(await observeGroup(page)));throw new Attention('needs_review','Guruh arizachisining shaxsiy sahifasi saqlanmadi.','personal');}
+   try{await page.waitForURL('**/Visa/PassportInfo/*',{timeout:NAV_TIMEOUT,waitUntil:'domcontentloaded'})}catch{state.set('group-report:'+group.id,JSON.stringify(await observeGroup(page)));throw new Attention('needs_review','Guruh arizachisining shaxsiy sahifasi saqlanmadi.','personal');}
   }
   if(new URL(page.url()).pathname.startsWith('/Visa/PassportInfo/')){
    const text=await page.locator('body').innerText(),number=text.match(/Application No\.:\s*(\d+)/)?.[1];if(!number)throw new Attention('needs_review','Guruh arizachisining rasmiy raqami o‘qilmadi.','passport');
    const visaId=new URL(page.url()).pathname.split('/').at(-1);if(!/^[a-f0-9-]{36}$/i.test(visaId)||saved.visaId&&saved.visaId!==visaId)throw new Attention('needs_review','Guruhdagi rasmiy arizachi raqami mos kelmadi.','passport');
    Object.assign(saved,{phase:'passport',currentUrl:page.url(),applicationNumber:number,visaId});cp.currentUrl=page.url();cp.members[member.id]=saved;await checkpoint(cp);
    await fillPassport(page,member.data);const before=page.url();await page.getByRole('button',{name:'Next',exact:true}).click();
-   try{await page.waitForURL(url=>url.href!==before,{timeout:15000,waitUntil:'domcontentloaded'})}catch{}
+   try{await page.waitForURL(url=>url.href!==before,{timeout:NAV_TIMEOUT,waitUntil:'domcontentloaded'})}catch{}
    const blocking=activeVisaMessage(await page.locator('body').innerText());if(blocking)throw new Attention('needs_review',member.data.firstName+': '+blocking,'passport');
    if(page.url()===before){state.set('group-report:'+group.id,JSON.stringify(await observeGroup(page)));throw new Attention('needs_review','Guruhdagi pasport formasi keyingi bosqichga o‘tmadi.','passport');}
    Object.assign(saved,{phase:'insurance',currentUrl:page.url()});cp.currentUrl=page.url();await checkpoint(cp);
