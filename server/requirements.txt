@@ -1,1 +1,3 @@
 opencv-python-headless==4.13.0.92
+# NumPy 2.4 raised its x86 baseline to x86-64-v2; 2.3 still runs on older/virtual CPUs.
+numpy>=2,<2.4

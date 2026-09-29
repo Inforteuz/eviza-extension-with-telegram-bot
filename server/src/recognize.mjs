@@ -1,14 +1,17 @@
-import sharp from 'sharp';
 import {readPassportAi} from './passport/ai.mjs';
 import {inspectPassportPortrait,renderPassportPortrait} from './passport/portrait.mjs';
+import {imageInfo} from './passport/image.mjs';
 
 export const MAX_IMAGE_BYTES=10*1024*1024;
 const identityFields=['firstName','middleName','lastName','nationality','birthDate','gender','birthCountry','birthCity','passportNumber','issueDate','expiryDate','passportIssuePlace'];
 
-export async function assertImage(bytes){
+const formatOf=b=>b[0]===0xff&&b[1]===0xd8&&b[2]===0xff?'jpeg':b.readUInt32BE(0)===0x89504e47?'png':b.toString('latin1',0,4)==='RIFF'&&b.toString('latin1',8,12)==='WEBP'?'webp':'';
+export async function assertImage(bytes,{python}={}){
  if(!bytes?.length||bytes.length>MAX_IMAGE_BYTES)throw Object.assign(Error('Rasm 10 MB dan kichik bo‘lishi kerak.'),{status:413});
- let meta;try{meta=await sharp(bytes,{limitInputPixels:40000000}).metadata()}catch{meta=null}
- if(!meta||!['jpeg','png','webp','heif'].includes(meta.format)||meta.width<300||meta.height<200)throw Object.assign(Error('JPG yoki PNG formatidagi tiniq pasport rasmini yuboring.'),{status:415});
+ const invalid=()=>Object.assign(Error('JPG yoki PNG formatidagi tiniq pasport rasmini yuboring.'),{status:415});
+ if(bytes.length<16||!formatOf(bytes))throw invalid();
+ let info;try{info=await imageInfo(bytes,python?{python}:{})}catch(error){if(error.code==='opencv_unavailable')throw Object.assign(Error(error.message),{status:503});throw invalid()}
+ if(Math.max(info.width,info.height)<300||Math.min(info.width,info.height)<200)throw invalid();
 }
 
 // Text and portrait are independent: an AI failure keeps the portrait and vice versa.
@@ -17,7 +20,7 @@ export async function recognizePassport(bytes,{config,readAi=readPassportAi,insp
  let inspection;
  const inspectOnce=()=>inspection||=inspect(bytes,config.pythonBin?{python:config.pythonBin}:{});
  const portraitTask=inspectOnce().then(render);
- const aiTask=portraitOnly?Promise.resolve(null):readAi(bytes,{OPENAI_API_KEY:config.openaiKey,PASSPORT_AI_MODEL:config.passportModel},{inspectPortrait:()=>inspectOnce()});
+ const aiTask=portraitOnly?Promise.resolve(null):readAi(bytes,{OPENAI_API_KEY:config.openaiKey,PASSPORT_AI_MODEL:config.passportModel,PYTHON_BIN:config.pythonBin},{inspectPortrait:()=>inspectOnce()});
  const [ai,portrait]=await Promise.allSettled([aiTask,portraitTask]);
  const result={data:{},notes:[],conflicts:[],unverifiedMrz:true,aiError:null,portrait:null,portraitError:null};
  if(portrait.status==='fulfilled')result.portrait=portrait.value.toString('base64');

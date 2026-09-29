@@ -5,6 +5,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      PYTHON_BIN: python
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -19,8 +21,6 @@ jobs:
           npm ci --prefix e2e
           python -m pip install -r server/requirements.txt
       - name: Unit tests
-        env:
-          PYTHON_BIN: python
         run: |
           npm test --prefix server
           npm test --prefix extension

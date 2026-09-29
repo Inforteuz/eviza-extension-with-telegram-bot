@@ -4,7 +4,10 @@ import {randomBytes,createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import sharp from 'sharp';
 import {cropPassportPortrait,portraitCropRectangle,renderPassportPortrait} from '../src/passport/portrait.mjs';
-import {recognizePassport} from '../src/recognize.mjs';
+import {recognizePassport,assertImage} from '../src/recognize.mjs';
+import {imagePipeline,imageInfo} from '../src/passport/image.mjs';
+import {python,skipWithoutOpenCV} from './opencv.mjs';
+const opencv={skip:skipWithoutOpenCV};
 
 test('portrait framing reserves hair, ears and chin and rejects incomplete source margins',()=>{
  const face={x:100,y:100,width:100,height:140};
@@ -14,13 +17,13 @@ test('portrait framing reserves hair, ears and chin and rejects incomplete sourc
  assert.throws(()=>portraitCropRectangle({...face,x:2},{x:0,y:0,width:400,height:400}),/to‘liq/);
  assert.throws(()=>portraitCropRectangle({...face,width:NaN},{x:0,y:0,width:400,height:400}),/aniq/);
 });
-test('render preserves full portrait height in 200px square without stretching or adjacent text',async()=>{
+test('render preserves full portrait height in 200px square without stretching or adjacent text',opencv,async()=>{
  const face={x:100,y:100,width:100,height:140},rectangle=portraitCropRectangle(face,{x:0,y:0,width:400,height:400});
  const photo=await sharp(randomBytes(rectangle.width*rectangle.height*3),{raw:{width:rectangle.width,height:rectangle.height,channels:3}}).tint('green').png().toBuffer();
  const hair=await sharp({create:{width:80,height:8,channels:3,background:'blue'}}).png().toBuffer();
  const chin=await sharp({create:{width:80,height:8,channels:3,background:'red'}}).png().toBuffer();
  const normalized=await sharp({create:{width:400,height:400,channels:3,background:'magenta'}}).composite([{input:photo,left:rectangle.left,top:rectangle.top},{input:hair,left:110,top:rectangle.top+4},{input:chin,left:110,top:rectangle.top+rectangle.height-12}]).png().toBuffer();
- const result=await renderPassportPortrait({normalized,face,width:400,height:400});
+ const result=await renderPassportPortrait({normalized,face,width:400,height:400,python});
  const m=await sharp(result).metadata();assert.equal(m.width,200);assert.equal(m.height,200);assert.ok(result.length>=5000&&result.length<=100000);
  const mean=async box=>(await sharp(await sharp(result).extract(box).toBuffer()).stats()).channels.map(c=>c.mean);
  const top=await mean({left:90,top:5,width:20,height:5}),bottom=await mean({left:90,top:189,width:20,height:5}),margin=await mean({left:1,top:30,width:8,height:140});
@@ -43,15 +46,37 @@ test('AI text survives crop failure and the portrait survives AI failure; the de
  assert.equal(aiCalls,0);assert.ok(only.portrait);
 });
 
-test('upright AI input preserves original resolution and falls back when orientation is uncertain',async()=>{
+test('upright AI input preserves original resolution and falls back when orientation is uncertain',opencv,async()=>{
  const {uprightPassportForReading}=await import('../src/passport/portrait.mjs');
  const original=await sharp({create:{width:1800,height:1200,channels:3,background:'green'}}).png().toBuffer();
- const rotated=await uprightPassportForReading(original,{inspect:async()=>({face:{rotation:90}})}),m=await sharp(rotated).metadata();assert.equal(m.width,1200);assert.equal(m.height,1800);
- const fallback=await uprightPassportForReading(original,{inspect:async()=>{throw Error('uncertain')}}),f=await sharp(fallback).metadata();assert.equal(f.width,1800);assert.equal(f.height,1200);
+ const rotated=await uprightPassportForReading(original,{python,inspect:async()=>({face:{rotation:90}})}),m=await sharp(rotated).metadata();assert.equal(m.width,1200);assert.equal(m.height,1800);
+ const fallback=await uprightPassportForReading(original,{python,inspect:async()=>{throw Error('uncertain')}}),f=await sharp(fallback).metadata();assert.equal(f.width,1800);assert.equal(f.height,1200);
 });
 
-// Runs only where Python + OpenCV are installed (the Docker image has them).
-test('the YuNet detector loads and rejects a page without a face',{skip:!process.env.PYTHON_BIN&&'PYTHON_BIN not set'},async()=>{
+test('the YuNet detector loads and rejects a page without a face',opencv,async()=>{
  const blank=await sharp({create:{width:800,height:560,channels:3,background:'#eee'}}).jpeg().toBuffer();
- await assert.rejects(cropPassportPortrait(blank,{python:process.env.PYTHON_BIN}),/Yuz va tik yo‘nalish/);
+ await assert.rejects(cropPassportPortrait(blank,{python}),/Yuz va tik yo‘nalish/);
+});
+test('the OpenCV pipeline applies EXIF orientation, rotates clockwise, fits inside a limit and encodes JPEG/PNG',opencv,async()=>{
+ // 300x200 stored sideways with EXIF orientation 6 (rotate 90 clockwise to view).
+ const tagged=await sharp({create:{width:300,height:200,channels:3,background:'#123456'}}).jpeg().withMetadata({orientation:6}).toBuffer();
+ assert.deepEqual(await imageInfo(tagged,{python}),{width:200,height:300});
+ // Left half red, right half blue; after 90 degrees clockwise the red half is on top.
+ const split=await sharp({create:{width:400,height:200,channels:3,background:'#0000ff'}}).composite([{input:await sharp({create:{width:200,height:200,channels:3,background:'#ff0000'}}).png().toBuffer(),left:0,top:0}]).png().toBuffer();
+ const rotated=await imagePipeline(split,[{op:'rotate',deg:90},{op:'resize_inside',max:100}],{format:'png'},{python});
+ const meta=await sharp(rotated).metadata();assert.equal(meta.width,50);assert.equal(meta.height,100);
+ const top=(await sharp(await sharp(rotated).extract({left:10,top:5,width:30,height:30}).toBuffer()).stats()).channels.map(c=>c.mean);
+ assert.ok(top[0]>200&&top[2]<50,'red half ends up on top');
+ const jpeg=await imagePipeline(split,[{op:'crop',left:0,top:0,width:200,height:200},{op:'contain',size:200}],{format:'jpeg',quality:90},{python});
+ assert.equal(jpeg[0],0xff);assert.equal(jpeg[1],0xd8);
+ await assert.rejects(imagePipeline(split,[{op:'crop',left:350,top:0,width:100,height:100}],{format:'png'},{python}),e=>e.code==='bad_crop');
+ await assert.rejects(imagePipeline(Buffer.from('not an image at all'),[],{format:'info'},{python}),e=>e.code==='invalid_image');
+});
+test('uploads are validated by type and size before any paid work',opencv,async()=>{
+ const ok=await sharp({create:{width:800,height:560,channels:3,background:'#ddd'}}).jpeg().toBuffer();
+ await assertImage(ok,{python});
+ const portrait=await sharp({create:{width:250,height:400,channels:3,background:'#ddd'}}).png().toBuffer();
+ await assertImage(portrait,{python});
+ for(const bad of [Buffer.from('hello world, not an image'),await sharp({create:{width:20,height:20,channels:3,background:'#fff'}}).png().toBuffer(),await sharp({create:{width:300,height:150,channels:3,background:'#fff'}}).jpeg().toBuffer()])await assert.rejects(assertImage(bad,{python}),e=>e.status===415);
+ await assert.rejects(assertImage(ok,{python:'nonexistent-python-evisa'}),e=>e.status===503);
 });

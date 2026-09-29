@@ -3,15 +3,15 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "eVisa Auto-Filler: Telegram bot, billing and extension API",
+  "description": "eVisa Auto-Filler: Telegram bot, billing and extension API (images via Python/OpenCV)",
   "scripts": {
     "start": "node src/index.mjs",
     "test": "node --test test/*.test.mjs"
   },
-  "dependencies": {
-    "sharp": "^0.35.4"
-  },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.4"
   }
 }

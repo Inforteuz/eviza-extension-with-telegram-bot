@@ -1,10 +1,10 @@
 import {spawn} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import sharp from 'sharp';
+import {imagePipeline,pngSize,defaultPython} from './image.mjs';
 
-export const defaultPython=()=>process.platform==='win32'?'python':'python3';
-export async function inspectPassportPortrait(bytes,{python=process.env.PYTHON_BIN||defaultPython()}={}){
- let normalized=await sharp(bytes,{limitInputPixels:40000000}).rotate().resize({width:1600,height:1600,fit:'inside',withoutEnlargement:true}).png().toBuffer();
+export {defaultPython};
+export async function inspectPassportPortrait(bytes,{python=defaultPython()}={}){
+ let normalized=await imagePipeline(bytes,[{op:'resize_inside',max:1600}],{format:'png'},{python});
  const result=await new Promise((resolve,reject)=>{
   const child=spawn(python,[fileURLToPath(new URL('./detect-face.py',import.meta.url))],{stdio:['pipe','pipe','ignore'],windowsHide:true});
   let output='';const timer=setTimeout(()=>{child.kill();reject(Error('Portretni aniqlash vaqti tugadi.'));},20000);
@@ -15,9 +15,9 @@ export async function inspectPassportPortrait(bytes,{python=process.env.PYTHON_B
  });
  if(result.error)throw Error(({no_face:'Yuz va tik yo‘nalish ishonchli aniqlanmadi. Tiniq pasport yoki alohida portret yuboring.',ambiguous_orientation:'Suratning tik yo‘nalishi noaniq. To‘g‘ri holatdagi tiniq pasport yuboring.',multiple_faces:'Bir nechta yuz yoki noaniq yo‘nalish topildi. Bitta pasportni tiniqroq yuboring.',detector_unavailable:'Portretni aniqlash modeli yoki Python/OpenCV o‘rnatilmagan.'})[result.error]||'Portret aniqlanmadi.');
  if(![0,90,180,270].includes(result.rotation))throw Error('Portret aylanishi noto‘g‘ri.');
- if(result.rotation)normalized=await sharp(normalized).rotate(result.rotation).png().toBuffer();
- const {width,height}=await sharp(normalized).metadata();
- return {normalized,face:result,width,height};
+ if(result.rotation)normalized=await imagePipeline(normalized,[{op:'rotate',deg:result.rotation}],{format:'png'},{python});
+ const {width,height}=pngSize(normalized);
+ return {normalized,face:result,width,height,python};
 }
 
 export function portraitCropRectangle(face,limits){
@@ -37,21 +37,19 @@ export async function cropPassportPortrait(bytes,options={}){
  return renderPassportPortrait(result);
 }
 
-export async function uprightPassportForReading(bytes,{inspect=inspectPassportPortrait}={}){
- const original=await sharp(bytes,{limitInputPixels:40000000}).rotate().png().toBuffer();
+export async function uprightPassportForReading(bytes,{inspect,python=defaultPython()}={}){
  let rotation=0;
- try{rotation=(await inspect(original)).face.rotation;}catch{/* Text can still be read when the portrait is unclear. */}
+ try{rotation=(await (inspect?inspect(bytes):inspectPassportPortrait(bytes,{python}))).face.rotation;}catch{/* Text can still be read when the portrait is unclear. */}
  if(![0,90,180,270].includes(rotation))rotation=0;
- return sharp(original).rotate(rotation).resize({width:2000,height:2000,fit:'inside',withoutEnlargement:true}).jpeg({quality:95}).toBuffer();
+ return imagePipeline(bytes,[{op:'rotate',deg:rotation},{op:'resize_inside',max:2000}],{format:'jpeg',quality:95},{python});
 }
-export async function renderPassportPortrait({normalized,face,width,height}){
+export async function renderPassportPortrait({normalized,face,width,height,python=defaultPython()}){
  const rectangle=portraitCropRectangle(face,{x:0,y:0,width,height});
- const crop=await sharp(normalized).extract(rectangle).png().toBuffer();
  // Contain preserves the complete frame and face proportions. White margins
  // fill the 200px square; no generated facial pixels and no head clipping.
- const cropped=sharp(crop).resize(200,200,{fit:'contain',background:'#fff'});
+ const steps=[{op:'crop',...rectangle},{op:'contain',size:200}];
  for(const quality of [95,100,90,85]){
-  const portrait=await cropped.clone().jpeg({quality,chromaSubsampling:'4:4:4'}).toBuffer();
+  const portrait=await imagePipeline(normalized,steps,{format:'jpeg',quality},{python});
   if(portrait.length>=5000&&portrait.length<=100000)return portrait;
  }
  throw Error('Portret hajmi 5–100 KB talabiga mos kelmadi. Kesishni tekshiring.');

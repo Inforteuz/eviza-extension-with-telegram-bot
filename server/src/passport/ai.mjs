@@ -1,4 +1,3 @@
-import sharp from 'sharp';
 import {parseMrz} from './mrz.mjs';
 import {uprightPassportForReading} from './portrait.mjs';
 
@@ -54,9 +53,9 @@ export async function checkPassportAi(config,{fetchImpl=fetch}={}){
  const r=await fetchImpl('https://api.openai.com/v1/models/'+encodeURIComponent(model),{headers:{Authorization:'Bearer '+config.OPENAI_API_KEY},redirect:'error',signal:AbortSignal.timeout(15000)});
  if(!r.ok)throw apiError(r.status);return {model};
 }
-export async function readPassportAi(bytes,config,{fetchImpl=fetch,inspectPortrait}={}){
+export async function readPassportAi(bytes,config,{fetchImpl=fetch,inspectPortrait,prepareImage}={}){
  if(!config.OPENAI_API_KEY)throw new PassportAiError('Serverda AI ulanmagan (OPENAI_API_KEY). Administratorga xabar bering.');
- const image=await uprightPassportForReading(bytes,{inspect:inspectPortrait});
+ const image=await (prepareImage?prepareImage(bytes):uprightPassportForReading(bytes,{inspect:inspectPortrait,...(config.PYTHON_BIN?{python:config.PYTHON_BIN}:{})}));
  let r;try{r=await fetchImpl('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+config.OPENAI_API_KEY,'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(60000),body:JSON.stringify({model:config.PASSPORT_AI_MODEL||defaultPassportModel,store:false,instructions:instructions+' '+portraitInstructions,input:[{role:'user',content:[{type:'input_text',text:'Read this passport. Leave uncertain values empty.'},{type:'input_image',image_url:'data:image/jpeg;base64,'+image.toString('base64'),detail:'high'}]}],text:{format:{type:'json_schema',name:'passport',strict:true,schema:passportSchema}},max_output_tokens:2000})})}catch{throw new PassportAiError('AI javobi vaqtida kelmadi. “Qayta o‘qish”ni bosing.')}
  if(!r.ok)throw apiError(r.status);
  let response;try{response=await r.json()}catch{throw new PassportAiError('AI javobi o‘qilmadi.')}
@@ -64,13 +63,4 @@ export async function readPassportAi(bytes,config,{fetchImpl=fetch,inspectPortra
  if(response.status!=='completed'||content.some(c=>c.type==='refusal'))throw new PassportAiError('AI pasportni o‘qishni yakunlamadi. Tiniq rasm bilan qayta sinang.');
  let raw;try{raw=JSON.parse(content.filter(c=>c.type==='output_text').map(c=>c.text).join(''))}catch{throw new PassportAiError('AI javobining formati mos kelmadi.')}
  return {...validateAiPassport(raw),usage:{inputTokens:response.usage?.input_tokens||0,outputTokens:response.usage?.output_tokens||0}};
-}
-
-export async function passportPortraitRegion(bytes,bounds){
- if(!bounds)return bytes;
- if(!validImageBounds(bounds))throw new PassportAiError('AI ajratgan portret chegarasini tekshiring.');
- const normalized=await sharp(bytes,{limitInputPixels:40000000}).rotate().toBuffer(),m=await sharp(normalized).metadata();
- const left=Math.floor(bounds.x*m.width),top=Math.floor(bounds.y*m.height),width=Math.min(m.width-left,Math.ceil(bounds.width*m.width)),height=Math.min(m.height-top,Math.ceil(bounds.height*m.height));
- if(left<0||top<0||width<40||height<40||left+width>m.width||top+height>m.height)throw new PassportAiError('AI ajratgan portret chegarasini tekshiring.');
- return sharp(normalized).extract({left,top,width,height}).png().toBuffer();
 }

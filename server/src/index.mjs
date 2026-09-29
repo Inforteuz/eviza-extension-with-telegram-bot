@@ -7,9 +7,13 @@ import {Auth} from './auth.mjs';
 import {Bot,userCommands,adminCommands} from './bot.mjs';
 import {createApi} from './api.mjs';
 import {telegramClient} from './telegram.mjs';
+import {imageInfo} from './passport/image.mjs';
 
 const config=loadConfig();assertRunnable(config);
 if(!config.openaiKey)console.warn('OPENAI_API_KEY berilmagan: pasport matni o‘qilmaydi, faqat portret kesiladi.');
+// Image work runs in Python/OpenCV; report a broken install at start instead of on the first upload.
+const tinyPng=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC','base64');
+await imageInfo(tinyPng,config.pythonBin?{python:config.pythonBin}:{}).then(()=>console.log('OpenCV: OK'),error=>console.error('OpenCV ishlamayapti, rasmlar qabul qilinmaydi:',error.code||error.message));
 const db=openDatabase(path.join(config.dataDir,'evisa.sqlite'));
 const billing=new Billing(db,{price:config.price,welcomeBonus:config.welcomeBonus,dedupeDays:config.dedupeDays});
 const auth=new Auth(db);

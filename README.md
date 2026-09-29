@@ -4,7 +4,7 @@
 
 * **Расширение Chrome/Edge**. Оператор перетаскивает фото паспортов, проверяет данные и портреты и нажимает ▶. Расширение само заполняет анкеты Individual или Group **до страницы оплаты**. Кнопку оплаты расширение не нажимает никогда: оплату выполняет оператор.
 * **Telegram-бот**. Через него идут подключение расширения, баланс, пополнение (Click/Payme через Telegram Payments или перевод на карту с чеком), статистика, уведомления «заявка готова к оплате» и админ-команды.
-* **Сервер** (Node.js). Держит бота, биллинг и API для расширения, распознаёт паспорт через AI (OpenAI) и вырезает портрет 200×200 (YuNet/OpenCV).
+* **Сервер** (Node.js). Держит бота, биллинг и API для расширения, распознаёт паспорт через AI (OpenAI) и вырезает портрет 200×200 (YuNet/OpenCV). Вся работа с изображениями идёт через Python/OpenCV, нативных Node-модулей нет. Поэтому сервер работает и на старых или виртуальных CPU без x86-64-v2 (SSE4.2), где готовые бинарники sharp/libvips и NumPy ≥ 2.4 не запускаются.
 
 ```
  Оператор ── Chrome/Edge ────────────────────────────────┐
@@ -128,14 +128,14 @@ node extension/scripts/pack.mjs --server https://evisa.example.uz
 ## 7. Структура репозитория
 
 ```
-server/                  бот + биллинг + API (Node, node:sqlite, sharp)
+server/                  бот + биллинг + API (Node, node:sqlite; изображения — Python/OpenCV)
   src/index.mjs          вход: HTTP-сервер + long polling
   src/bot.mjs            Telegram-бот (меню, оплата, админ)
   src/billing.mjs        баланс, резерв/списание, пополнения, статистика
   src/auth.mjs           токены расширения (хранятся хэшем), привязка через deep-link
   src/api.mjs            /api/ext/* для расширения
   src/recognize.mjs      AI-текст + портрет (независимо друг от друга)
-  src/passport/          AI-схема, MRZ, YuNet-детектор (из исходного проекта)
+  src/passport/          AI-схема, MRZ, YuNet-детектор, image.py (OpenCV-конвейер изображений)
 extension/               Chrome/Edge MV3, сборка не нужна
   src/background.js      service worker: очередь распознавания, команды панели
   src/lib/runner.js      запуск Individual/Group, остановка, восстановление
@@ -150,9 +150,10 @@ e2e/                     браузерные тесты: Chromium + расши�
 
 ```bash
 npm ci --prefix server && npm ci --prefix e2e
-npm test                     # server (38) + extension (44) unit-тесты
+pip install -r server/requirements.txt   # OpenCV + NumPy < 2.4
+export PYTHON_BIN=python3                # Python с OpenCV (тесты изображений без него пропускаются)
+npm test                     # server (40) + extension (45) unit-тесты
 npm run test:e2e             # Chromium: привязка, чтение, Individual, Group ×3, вход, 1015
-PYTHON_BIN=python3 node --test server/test/portrait.test.mjs   # с реальным OpenCV
 ```
 
 Для e2e нужен Chromium (`npx --prefix e2e playwright-core install chromium` или `CHROMIUM_PATH=...`). Мок сайта в `e2e/mock-saudi.mjs` повторяет подписи и id полей, на которых сценарии проверялись вживую.

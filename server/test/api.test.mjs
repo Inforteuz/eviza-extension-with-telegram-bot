@@ -6,6 +6,7 @@ import {openDatabase} from '../src/db.mjs';
 import {Billing} from '../src/billing.mjs';
 import {Auth} from '../src/auth.mjs';
 import {createApi} from '../src/api.mjs';
+import {python,skipWithoutOpenCV} from './opencv.mjs';
 
 const A='11111111-1111-4111-8111-111111111111',B='22222222-2222-4222-8222-222222222222';
 const image=await sharp({create:{width:800,height:560,channels:3,background:'#ddd'}}).jpeg().toBuffer();
@@ -16,7 +17,7 @@ async function setup(t,{recognize}={}){
  const notes=[];const bot={notifyReady:async(id,e)=>notes.push({id,...e}),notifyLowBalance:async(id,balance)=>notes.push({id,low:balance})};
  let calls=0;
  const fake=recognize||(async(_bytes,{portraitOnly})=>{calls++;return {data:portraitOnly?{}:{firstName:'TEST',passportNumber:'AB1234567'},notes:[],conflicts:[],unverifiedMrz:false,aiError:null,portrait:'cG9ydHJhaXQ=',portraitError:null}});
- const api=createApi({billing,auth,bot,config:{dedupeDays:30},botUsername:'evisa_test_bot',recognize:fake,log:{error(){}}});
+ const api=createApi({billing,auth,bot,config:{dedupeDays:30,pythonBin:python},botUsername:'evisa_test_bot',recognize:fake,log:{error(){}},...(skipWithoutOpenCV?{assertImage:async()=>{}}:{})});
  const server=http.createServer(api);await new Promise(ok=>server.listen(0,'127.0.0.1',ok));t.after(()=>server.close());
  const base=`http://127.0.0.1:${server.address().port}`,token=auth.issue(1);
  const request=async(method,path,{body,headers={},auth:useAuth=true}={})=>{const r=await fetch(base+path,{method,headers:{...(useAuth?{Authorization:'Bearer '+token}:{}),...headers},body});return {status:r.status,data:await r.json()}};
@@ -49,7 +50,7 @@ test('portrait-only recrop is free and never calls AI',async t=>{
  const r=await f.upload(A,'&portraitOnly=1');assert.equal(r.status,200);assert.equal(r.data.charged,0);assert.ok(r.data.portrait);
 });
 
-test('input validation rejects bad ids, non-images and tiny images',async t=>{
+test('input validation rejects bad ids, non-images and tiny images',{skip:skipWithoutOpenCV},async t=>{
  const f=await setup(t);f.billing.credit(1,50000,'topup','t1');
  assert.equal((await f.upload('not-a-uuid')).status,400);
  assert.equal((await f.request('POST',`/api/ext/passports?applicantId=${A}`,{body:'hello',headers:{'Content-Type':'text/plain'}})).status,415);

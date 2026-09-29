@@ -1,6 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import {InsufficientBalance} from './billing.mjs';
-import {assertImage,recognizePassport,MAX_IMAGE_BYTES} from './recognize.mjs';
+import {assertImage as checkImage,recognizePassport,MAX_IMAGE_BYTES} from './recognize.mjs';
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 class HttpError extends Error {constructor(status,message,extra={}){super(message);this.status=status;this.extra=extra}}
@@ -19,7 +19,7 @@ async function readBody(req,limit){
 }
 async function readJson(req){const raw=await readBody(req,64*1024);try{return raw.length?JSON.parse(raw.toString('utf8')):{}}catch{throw new HttpError(400,'JSON noto‘g‘ri.')}}
 
-export function createApi({billing,auth,bot,config,botUsername='',recognize=recognizePassport,log=console}){
+export function createApi({billing,auth,bot,config,botUsername='',recognize=recognizePassport,assertImage=bytes=>checkImage(bytes,{python:config.pythonBin}),log=console}){
  const readLimiter=new RateLimiter(40,60000),pairLimiter=new RateLimiter(20,60000),active=new Map();
  const botUrl=payload=>botUsername?`https://t.me/${botUsername}${payload?'?start='+payload:''}`:'';
  const account=user=>({user:{id:user.id,firstName:user.first_name||'',username:user.username||''},balance:billing.user(user.id).balance,price:billing.price(),currency:'UZS',botUsername,topupUrl:botUrl('topup'),dedupeDays:config.dedupeDays});
