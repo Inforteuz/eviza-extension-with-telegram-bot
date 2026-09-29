@@ -1,0 +1,14 @@
+import {existsSync,mkdirSync,writeFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+import {windowsInitialConfig} from '../agent/platform.mjs';
+if(process.platform!=='win32')throw Error('Windows installer only.');
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..'),file=path.join(root,'agent','data','config.json');
+if(existsSync(file))throw Error('Existing settings are preserved; automatic overwrite refused.');
+const python=process.argv[2];if(!python||!existsSync(python))throw Error('Python runtime not found.');
+const edge=[process.env['ProgramFiles(x86)'],process.env.ProgramFiles,process.env.LOCALAPPDATA].filter(Boolean).some(dir=>existsSync(path.join(dir,'Microsoft','Edge','Application','msedge.exe')));
+const chrome=[process.env.ProgramFiles,process.env['ProgramFiles(x86)'],process.env.LOCALAPPDATA].filter(Boolean).some(dir=>existsSync(path.join(dir,'Google','Chrome','Application','chrome.exe')));
+if(!edge&&!chrome)throw Error('Install Microsoft Edge or Google Chrome and rerun the installer.');
+mkdirSync(path.dirname(file),{recursive:true});
+writeFileSync(file,JSON.stringify({...windowsInitialConfig(python),BROWSER_CHANNEL:edge?'msedge':'chrome'},null,2),{flag:'wx'});
+console.log('Empty Windows settings created. Connect Telegram and AI locally.');

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `idx_settings_telegram_operator` ON `settings` (`telegram_bot_id`,`telegram_operator_id`);
