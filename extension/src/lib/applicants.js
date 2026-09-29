@@ -25,7 +25,7 @@ export async function sha256(text){const bytes=new TextEncoder().encode(text);co
 export async function confirmationFor(data,portraitHash){return sha256(JSON.stringify(data)+'|'+portraitHash)}
 export const displayName=a=>[a.data.firstName,a.data.lastName].filter(Boolean).join(' ')||a.fileName||'Yangi arizachi';
 
-// A fresh AI read replaces the identity fields it could read and keeps the rest.
+// A fresh server read replaces the identity fields it could read and keeps the rest.
 export function mergeRecognition(a,result,tripDefaults){
  const data={...a.data};
  for(const key of identityFields){const value=result.data?.[key];if(typeof value==='string'&&value)data[key]=value}

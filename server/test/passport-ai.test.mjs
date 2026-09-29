@@ -14,7 +14,7 @@ test('AI uses only the official image API, no storage, a strict schema and no br
  }});assert.equal(data.firstName,'ANNA');assert.equal(data.source,'ai');assert.equal(called,1);assert.equal(data.usage.outputTokens,80);
 });
 test('missing AI key never falls back to local OCR or sends a request',async()=>{
- let called=0;await assert.rejects(readPassportAi(Buffer.from('image'),{},{fetchImpl:()=>{called++}}),/AI ulanmagan/);assert.equal(called,0);
+ let called=0;await assert.rejects(readPassportAi(Buffer.from('image'),{},{fetchImpl:()=>{called++}}),/ulanmagan/);assert.equal(called,0);
 });
 test('unreadable fields, invalid dates, conflicting MRZ digits and unsafe crop bounds remain unresolved',()=>{
  assert.throws(()=>validateAiPassport({...raw,documentType:'uncertain'}),PassportAiError);

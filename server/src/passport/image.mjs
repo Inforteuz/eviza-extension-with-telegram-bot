@@ -3,7 +3,7 @@ import {fileURLToPath} from 'node:url';
 
 export const defaultPython=()=>process.env.PYTHON_BIN||(process.platform==='win32'?'python':'python3');
 const script=fileURLToPath(new URL('./image.py',import.meta.url));
-const messages={invalid_image:'Rasmni o‘qib bo‘lmadi. JPG yoki PNG pasport rasmini yuboring.',too_large:'Rasm juda katta.',too_many_pixels:'Rasm o‘lchami juda katta.',bad_crop:'Portret chegarasi rasmdan tashqariga chiqdi.',opencv_unavailable:'Serverda rasm bilan ishlash (Python/OpenCV) sozlanmagan.'};
+const messages={invalid_image:'Rasmni o‘qib bo‘lmadi. JPG yoki PNG pasport rasmini yuboring.',too_large:'Rasm juda katta.',too_many_pixels:'Rasm o‘lchami juda katta.',bad_crop:'Portret chegarasi rasmdan tashqariga chiqdi.',opencv_unavailable:'Serverda rasm bilan ishlash tizim paketi sozlanmagan. Administratorga xabar bering.'};
 export class ImageError extends Error {constructor(code){super(messages[code]||'Rasmni qayta ishlab bo‘lmadi.');this.code=code;this.safeToDisplay=true}}
 
 // Runs one OpenCV pipeline (see image.py). Returns the encoded image, or {width,height} for "info".

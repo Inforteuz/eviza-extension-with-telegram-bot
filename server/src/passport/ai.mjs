@@ -2,6 +2,18 @@ import {parseMrz} from './mrz.mjs';
 import {uprightPassportForReading} from './portrait.mjs';
 
 export const defaultPassportModel='gpt-4.1';
+// Tried in order; a busy (503/429) or missing model falls through to the next one.
+// GEMINI_MODEL may be one model or a comma-separated list; GEMINI_THINKING sets the reasoning level.
+export const defaultGeminiModels=['gemini-3.7-flash','gemini-3.6-flash','gemini-3.5-flash'];
+export const defaultGeminiThinking='high';
+// The model that answered last is tried first for a while, then the preferred order is retried.
+const STICKY_MS=10*60000;
+let lastGood=null;
+export function geminiOrder(models,now=Date.now()){
+ if(!lastGood||now-lastGood.at>STICKY_MS||!models.includes(lastGood.model))return models;
+ return [lastGood.model,...models.filter(m=>m!==lastGood.model)];
+}
+export function resetGeminiPreference(){lastGood=null}
 const validDate=s=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;const d=new Date(s+'T00:00:00Z');return !Number.isNaN(+d)&&d.toISOString().slice(0,10)===s;};
 export class PassportAiError extends Error{constructor(message){super(message);this.name='PassportAiError';this.safeToDisplay=true}}
 const identityFields=['firstName','middleName','lastName','nationality','birthDate','gender','birthCountry','birthCity','passportNumber','issueDate','expiryDate','passportIssuePlace'];
@@ -22,10 +34,22 @@ export function normalizePassportGender(value){
  return '';
 }
 
+// Operator-facing texts never name the vendor or "AI"; the server log carries details.
+export const readerMessages={
+ notPassport:'Tizim paketi rasmda bitta aniq pasportni ajrata olmadi.',
+ badFormat:'Tizim paketi javobining formati mos kelmadi.',
+ unreadable:'Tizim paketi javobi o‘qilmadi.',
+ incomplete:'Tizim paketi pasportni o‘qishni yakunlamadi. Tiniq rasm bilan qayta sinang.',
+ timeout:'Tizim paketi javobi vaqtida kelmadi. “Qayta o‘qish”ni bosing.',
+ busy:'Tizim paketi hozir band. Birozdan keyin “Qayta o‘qish”ni bosing.',
+ failed:'Tizim paketi ulanishi bajarilmadi. Keyinroq “Qayta o‘qish”ni bosing.',
+ misconfigured:'Tizim paketi sozlanmagan yoki kaliti ishlamayapti. Administratorga xabar bering.',
+ region:'Tizim paketi server joylashgan hududda ishlamaydi. Administratorga xabar bering.',
+};
 export function validateAiPassport(raw){
- if(!raw||raw.documentType!=='passport')throw new PassportAiError('AI rasmda bitta aniq pasportni ajrata olmadi.');
- const data={};for(const key of identityFields){if(typeof raw[key]!=='string'||raw[key].length>120)throw new PassportAiError('AI javobining formati mos kelmadi.');data[key]=raw[key].trim();}
- if(!Array.isArray(raw.unreadableFields)||raw.unreadableFields.some(k=>!identityFields.includes(k)))throw new PassportAiError('AI javobining formati mos kelmadi.');
+ if(!raw||raw.documentType!=='passport')throw new PassportAiError(readerMessages.notPassport);
+ const data={};for(const key of identityFields){if(typeof raw[key]!=='string'||raw[key].length>120)throw new PassportAiError(readerMessages.badFormat);data[key]=raw[key].trim();}
+ if(!Array.isArray(raw.unreadableFields)||raw.unreadableFields.some(k=>!identityFields.includes(k)))throw new PassportAiError(readerMessages.badFormat);
  for(const key of raw.unreadableFields)data[key]='';
  for(const key of ['birthDate','issueDate','expiryDate'])if(data[key]&&!validDate(data[key]))data[key]='';
  data.gender=normalizePassportGender(data.gender);
@@ -46,21 +70,109 @@ export function validateAiPassport(raw){
  return {...data,portraitBounds,headBounds:[0,90,180,270].includes(raw.portraitRotation)?headBounds:null,portraitRotation:raw.portraitRotation,unverifiedMrz,source:'ai',conflicts};
 }
 
-function apiError(status){return new PassportAiError(status===401?'Serverdagi AI API kaliti ishlamadi. Administratorga xabar bering.':status===429?'AI xizmati hozir band yoki limiti tugagan. Birozdan keyin qayta urinib ko‘ring.':status===403||status===404?'Serverda tanlangan AI modeli ochiq emas. Administratorga xabar bering.':'AI ulanishi bajarilmadi. Keyinroq “Qayta o‘qish”ni bosing.')}
+function apiError(status){
+ console.warn('OpenAI:',status);
+ return new PassportAiError(status===429?readerMessages.busy:[401,403,404].includes(status)?readerMessages.misconfigured:readerMessages.failed);
+}
 export async function checkPassportAi(config,{fetchImpl=fetch}={}){
- if(!config.OPENAI_API_KEY)throw new PassportAiError('Serverda AI ulanmagan (OPENAI_API_KEY).');
+ if(!config.OPENAI_API_KEY)throw new PassportAiError('Tizim paketi ulanmagan (OPENAI_API_KEY).');
  const model=config.PASSPORT_AI_MODEL||defaultPassportModel;
  const r=await fetchImpl('https://api.openai.com/v1/models/'+encodeURIComponent(model),{headers:{Authorization:'Bearer '+config.OPENAI_API_KEY},redirect:'error',signal:AbortSignal.timeout(15000)});
  if(!r.ok)throw apiError(r.status);return {model};
 }
-export async function readPassportAi(bytes,config,{fetchImpl=fetch,inspectPortrait,prepareImage}={}){
- if(!config.OPENAI_API_KEY)throw new PassportAiError('Serverda AI ulanmagan (OPENAI_API_KEY). Administratorga xabar bering.');
- const image=await (prepareImage?prepareImage(bytes):uprightPassportForReading(bytes,{inspect:inspectPortrait,...(config.PYTHON_BIN?{python:config.PYTHON_BIN}:{})}));
- let r;try{r=await fetchImpl('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+config.OPENAI_API_KEY,'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(60000),body:JSON.stringify({model:config.PASSPORT_AI_MODEL||defaultPassportModel,store:false,instructions:instructions+' '+portraitInstructions,input:[{role:'user',content:[{type:'input_text',text:'Read this passport. Leave uncertain values empty.'},{type:'input_image',image_url:'data:image/jpeg;base64,'+image.toString('base64'),detail:'high'}]}],text:{format:{type:'json_schema',name:'passport',strict:true,schema:passportSchema}},max_output_tokens:2000})})}catch{throw new PassportAiError('AI javobi vaqtida kelmadi. “Qayta o‘qish”ni bosing.')}
+// Which AI reads the text: AI_PROVIDER if set, otherwise whichever key is configured (OpenAI first).
+export function aiProvider(config){
+ const wanted=String(config.AI_PROVIDER||'').toLowerCase();
+ if(wanted==='openai'||wanted==='gemini')return wanted;
+ return config.OPENAI_API_KEY?'openai':config.GEMINI_API_KEY?'gemini':'';
+}
+// Gemini's responseSchema is an OpenAPI subset: upper-case types, `nullable` instead of
+// anyOf-with-null, no additionalProperties, string-only enums.
+export function geminiSchema(schema){
+ if(schema.anyOf){
+  const rest=schema.anyOf.filter(s=>s.type!=='null');
+  if(rest.length===1)return {...geminiSchema(rest[0]),nullable:true};
+  return {anyOf:rest.map(geminiSchema)};
+ }
+ const out={};
+ for(const [key,value] of Object.entries(schema)){
+  if(key==='additionalProperties')continue;
+  if(key==='type')out.type=String(value).toUpperCase();
+  else if(key==='properties')out.properties=Object.fromEntries(Object.entries(value).map(([k,v])=>[k,geminiSchema(v)]));
+  else if(key==='items')out.items=geminiSchema(value);
+  else if(key==='enum'){if(value.every(v=>typeof v==='string'&&v))out.enum=value}
+  else out[key]=value;
+ }
+ return out;
+}
+function geminiError(status,body){
+ const reason=JSON.stringify(body?.error||{});
+ if(/API_KEY_INVALID|API key not valid/i.test(reason))return new PassportAiError(readerMessages.misconfigured);
+ if(/location is not supported/i.test(reason))return new PassportAiError(readerMessages.region);
+ if(status===403||status===404)return new PassportAiError(readerMessages.misconfigured);
+ if(status===429||status===503||status===500)return new PassportAiError(readerMessages.busy);
+ return new PassportAiError(readerMessages.failed);
+}
+async function readWithOpenAi(image,config,fetchImpl){
+ let r;try{r=await fetchImpl('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:'Bearer '+config.OPENAI_API_KEY,'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(60000),body:JSON.stringify({model:config.PASSPORT_AI_MODEL||defaultPassportModel,store:false,instructions:instructions+' '+portraitInstructions,input:[{role:'user',content:[{type:'input_text',text:'Read this passport. Leave uncertain values empty.'},{type:'input_image',image_url:'data:image/jpeg;base64,'+image.toString('base64'),detail:'high'}]}],text:{format:{type:'json_schema',name:'passport',strict:true,schema:passportSchema}},max_output_tokens:2000})})}catch{throw new PassportAiError(readerMessages.timeout)}
  if(!r.ok)throw apiError(r.status);
- let response;try{response=await r.json()}catch{throw new PassportAiError('AI javobi o‘qilmadi.')}
+ let response;try{response=await r.json()}catch{throw new PassportAiError(readerMessages.unreadable)}
  const content=(response.output||[]).filter(item=>item.type==='message').flatMap(item=>item.content||[]);
- if(response.status!=='completed'||content.some(c=>c.type==='refusal'))throw new PassportAiError('AI pasportni o‘qishni yakunlamadi. Tiniq rasm bilan qayta sinang.');
- let raw;try{raw=JSON.parse(content.filter(c=>c.type==='output_text').map(c=>c.text).join(''))}catch{throw new PassportAiError('AI javobining formati mos kelmadi.')}
- return {...validateAiPassport(raw),usage:{inputTokens:response.usage?.input_tokens||0,outputTokens:response.usage?.output_tokens||0}};
+ if(response.status!=='completed'||content.some(c=>c.type==='refusal'))throw new PassportAiError(readerMessages.incomplete);
+ let raw;try{raw=JSON.parse(content.filter(c=>c.type==='output_text').map(c=>c.text).join(''))}catch{throw new PassportAiError(readerMessages.badFormat)}
+ return {raw,usage:{inputTokens:response.usage?.input_tokens||0,outputTokens:response.usage?.output_tokens||0}};
+}
+async function readWithGemini(image,config,fetchImpl,{sleep=ms=>new Promise(r=>setTimeout(r,ms)),now=Date.now,budgetMs=100000}={}){
+ const configured=String(config.GEMINI_MODEL||'').split(',').map(m=>m.trim()).filter(Boolean);
+ const models=configured.length?configured:defaultGeminiModels;
+ const thinking=config.GEMINI_THINKING===undefined||config.GEMINI_THINKING===''?defaultGeminiThinking:String(config.GEMINI_THINKING).toLowerCase();
+ const request=withThinking=>JSON.stringify({
+  systemInstruction:{parts:[{text:instructions+' '+portraitInstructions}]},
+  contents:[{role:'user',parts:[{text:'Read this passport. Leave uncertain values empty. Reply with the JSON object only.'},{inlineData:{mimeType:'image/jpeg',data:image.toString('base64')}}]}],
+  // Room for the model's reasoning tokens as well as the JSON answer.
+  generationConfig:{responseMimeType:'application/json',responseSchema:geminiSchema(passportSchema),temperature:0,maxOutputTokens:16384,...(withThinking&&thinking!=='off'?{thinkingConfig:{thinkingLevel:thinking}}:{})},
+ });
+ let lastError=null;
+ // The extension waits 120 s for the whole upload; stop trying models well before that.
+ const deadline=now()+budgetMs;
+ // Up to three rounds over all models: a demand spike (503) usually clears within seconds.
+ for(let round=0;round<3;round++){
+  if(round){if(deadline-now()<15000)break;await sleep(round*2000)}
+  for(const model of geminiOrder(models)){
+   let withThinking=true;
+   for(let attempt=0;attempt<2;attempt++){
+    const left=deadline-now();
+    if(left<5000)throw lastError||new PassportAiError(readerMessages.timeout);
+    let r,response=null;
+    try{r=await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{method:'POST',headers:{'x-goog-api-key':config.GEMINI_API_KEY,'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(Math.min(left,75000)),body:request(withThinking)})}
+    catch{console.warn(`Gemini ${model}: timeout`);lastError=new PassportAiError(readerMessages.timeout);break}
+    try{response=await r.json()}catch{/* empty body */}
+    if(r.ok){
+     const candidate=response?.candidates?.[0];
+     if(response?.promptFeedback?.blockReason||!candidate||!['STOP',undefined].includes(candidate.finishReason))throw new PassportAiError(readerMessages.incomplete);
+     const text=(candidate.content?.parts||[]).filter(p=>typeof p.text==='string'&&!p.thought).map(p=>p.text).join('').trim().replace(/^```(?:json)?\s*|\s*```$/g,'');
+     let raw;try{raw=JSON.parse(text)}catch{throw new PassportAiError(readerMessages.badFormat)}
+     lastGood={model,at:now()};
+     return {raw,model,usage:{inputTokens:response.usageMetadata?.promptTokenCount||0,outputTokens:response.usageMetadata?.candidatesTokenCount||0,thinkingTokens:response.usageMetadata?.thoughtsTokenCount||0}};
+    }
+    // Details stay in the server log; operators only see a neutral message.
+    const detail=String(response?.error?.message||'');
+    console.warn(`Gemini ${model}: ${r.status} ${detail.slice(0,200)}`);
+    // A model without reasoning levels: ask it again without thinkingConfig.
+    if(r.status===400&&withThinking&&/thinking/i.test(detail)){withThinking=false;continue}
+    lastError=geminiError(r.status,response);
+    if([503,500,429,404].includes(r.status))break;
+    throw lastError;
+   }
+  }
+ }
+ throw lastError||new PassportAiError(readerMessages.failed);
+}
+export async function readPassportAi(bytes,config,{fetchImpl=fetch,inspectPortrait,prepareImage,sleep,now,budgetMs}={}){
+ const provider=aiProvider(config);
+ if(!provider||(provider==='openai'&&!config.OPENAI_API_KEY)||(provider==='gemini'&&!config.GEMINI_API_KEY))throw new PassportAiError('Tizim paketi ulanmagan. Administratorga xabar bering.');
+ const image=await (prepareImage?prepareImage(bytes):uprightPassportForReading(bytes,{inspect:inspectPortrait,...(config.PYTHON_BIN?{python:config.PYTHON_BIN}:{})}));
+ const options=Object.fromEntries(Object.entries({sleep,now,budgetMs}).filter(([,v])=>v!==undefined));
+ const {raw,usage,model}=provider==='gemini'?await readWithGemini(image,config,fetchImpl,options):await readWithOpenAi(image,config,fetchImpl);
+ return {...validateAiPassport(raw),usage,provider,model:model||config.PASSPORT_AI_MODEL||(provider==='openai'?defaultPassportModel:'')};
 }

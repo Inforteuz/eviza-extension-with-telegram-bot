@@ -4,7 +4,7 @@
 #   bash deploy.sh your.domain.uz            # the service owns the whole domain
 #   bash deploy.sh your.domain.uz/evisa      # share a domain already served by nginx (path prefix)
 # Values may be passed as environment variables instead of prompts:
-#   TELEGRAM_BOT_TOKEN, ADMIN_IDS, OPENAI_API_KEY, CARD_NUMBER, CARD_HOLDER, PAYMENT_PROVIDER_TOKEN,
+#   TELEGRAM_BOT_TOKEN, ADMIN_IDS, GEMINI_API_KEY or OPENAI_API_KEY, CARD_NUMBER, CARD_HOLDER, PAYMENT_PROVIDER_TOKEN,
 #   BRANCH, DIR, SERVER_PORT, PROXY (auto|caddy|nginx), REPLACE_NGINX_SITE=1
 # Re-running the script updates the code and keeps server/.env and the database.
 set -euo pipefail
@@ -94,11 +94,17 @@ fi
 [[ "$ADMINS" =~ ^[0-9]+([ ,]+[0-9]+)*$ ]] || die "ADMIN_IDS noto'g'ri: $ADMINS"
 set_env ADMIN_IDS "$ADMINS"
 
-# ---- OpenAI key (optional: without it only the portrait is cut, text is typed manually) ----
+# ---- Passport text reader key (optional: without it only the portrait is cut) ----
+# Gemini (AIza.../AQ...) or OpenAI (sk-...); the type is detected from the key itself.
+if [ -n "${GEMINI_API_KEY:-}" ]; then set_env GEMINI_API_KEY "$GEMINI_API_KEY"; fi
 if [ -n "${OPENAI_API_KEY:-}" ]; then set_env OPENAI_API_KEY "$OPENAI_API_KEY"; fi
-if [ -z "$(get_env OPENAI_API_KEY)" ]; then
-  KEY="$(ask "OpenAI API kaliti (pasportni o'qish uchun; hozir bo'lmasa Enter): " secret)"
-  [ -z "$KEY" ] || set_env OPENAI_API_KEY "$KEY"
+if [ -z "$(get_env GEMINI_API_KEY)" ] && [ -z "$(get_env OPENAI_API_KEY)" ]; then
+  KEY="$(ask "Gemini yoki OpenAI API kaliti (pasport matnini o'qish uchun; hozir bo'lmasa Enter): " secret)"
+  case "$KEY" in
+    "") ;;
+    sk-*) set_env OPENAI_API_KEY "$KEY" ;;
+    *) set_env GEMINI_API_KEY "$KEY" ;;
+  esac
 fi
 
 # ---- Payment methods ----

@@ -31,7 +31,7 @@ test('render preserves full portrait height in 200px square without stretching o
 });
 test('AI coordinates and rotation cannot bypass the independent portrait detector',async()=>{
  const bytes=await sharp({create:{width:400,height:400,channels:3,background:'white'}}).png().toBuffer();
- await assert.rejects(cropPassportPortrait(bytes,{python:'nonexistent-python-evisa',portraitBounds:{x:.1,y:.1,width:.8,height:.8},headBounds:{x:.2,y:.2,width:.6,height:.6},portraitRotation:180}),/Python/);
+ await assert.rejects(cropPassportPortrait(bytes,{python:'nonexistent-python-evisa',portraitBounds:{x:.1,y:.1,width:.8,height:.8},headBounds:{x:.2,y:.2,width:.6,height:.6},portraitRotation:180}),/sozlanmagan|o‘rnatilmagan/);
  const model=readFileSync(new URL('../src/passport/face_detection_yunet_2023mar.onnx',import.meta.url));
  assert.equal(createHash('sha256').update(model).digest('hex'),'8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4');
 });

@@ -20,7 +20,7 @@ export async function recognizePassport(bytes,{config,readAi=readPassportAi,insp
  let inspection;
  const inspectOnce=()=>inspection||=inspect(bytes,config.pythonBin?{python:config.pythonBin}:{});
  const portraitTask=inspectOnce().then(render);
- const aiTask=portraitOnly?Promise.resolve(null):readAi(bytes,{OPENAI_API_KEY:config.openaiKey,PASSPORT_AI_MODEL:config.passportModel,PYTHON_BIN:config.pythonBin},{inspectPortrait:()=>inspectOnce()});
+ const aiTask=portraitOnly?Promise.resolve(null):readAi(bytes,{OPENAI_API_KEY:config.openaiKey,PASSPORT_AI_MODEL:config.passportModel,GEMINI_API_KEY:config.geminiKey,GEMINI_MODEL:config.geminiModel,GEMINI_THINKING:config.geminiThinking,AI_PROVIDER:config.aiProvider,PYTHON_BIN:config.pythonBin},{inspectPortrait:()=>inspectOnce()});
  const [ai,portrait]=await Promise.allSettled([aiTask,portraitTask]);
  const result={data:{},notes:[],conflicts:[],unverifiedMrz:true,aiError:null,portrait:null,portraitError:null};
  if(portrait.status==='fulfilled')result.portrait=portrait.value.toString('base64');
@@ -29,8 +29,8 @@ export async function recognizePassport(bytes,{config,readAi=readPassportAi,insp
   if(ai.status==='fulfilled'){
    for(const key of identityFields)result.data[key]=ai.value[key]||'';
    result.conflicts=ai.value.conflicts||[];result.unverifiedMrz=!!ai.value.unverifiedMrz;
-   result.notes.push('Pasport matni AI orqali o‘qildi.');
-   if(result.conflicts.length)result.notes.push('AI o‘qigan matn va MRZ orasida farq bor. Mos kelmagan qiymatlarni tekshiring.');
+   result.notes.push('Pasport matni tizim paketi orqali o‘qildi.');
+   if(result.conflicts.length)result.notes.push('Tizim paketi o‘qigan matn va MRZ orasida farq bor. Mos kelmagan qiymatlarni tekshiring.');
    result.notes.push(result.unverifiedMrz?'MRZ qatori ishonchli o‘qilmadi. O‘qilmagan maydonlarni tekshiring.':'MRZ raqam va sanalarining nazorat raqamlari tekshirildi. Ism va familiyani surat bilan solishtiring.');
   }else result.aiError=ai.reason?.safeToDisplay?ai.reason.message:'Pasport matnini o‘qib bo‘lmadi. Maydonlarni qo‘lda to‘ldiring yoki tiniqroq rasm yuklang.';
  }

@@ -144,9 +144,27 @@ export class Billing {
   }
   return out;
  }
+ // Admin panel: most recently active users first.
+ listUsers({offset=0,limit=10}={}){
+  return {total:this.db.prepare('SELECT COUNT(*) n FROM users').get().n,rows:this.db.prepare('SELECT * FROM users ORDER BY updated_at DESC,id DESC LIMIT ? OFFSET ?').all(limit,offset)};
+ }
+ // Numeric ID, @username or part of the name.
+ findUsers(query,limit=10){
+  const q=String(query||'').trim();if(!q)return [];
+  if(/^\d{1,15}$/.test(q)){const u=this.user(Number(q));if(u)return [u]}
+  if(q.startsWith('@'))return this.db.prepare('SELECT * FROM users WHERE username=? COLLATE NOCASE LIMIT ?').all(q.slice(1),limit);
+  const like='%'+q.replace(/[\\%_]/g,c=>'\\'+c)+'%';
+  return this.db.prepare("SELECT * FROM users WHERE username LIKE ?1 ESCAPE '\\' OR first_name LIKE ?1 ESCAPE '\\' OR last_name LIKE ?1 ESCAPE '\\' OR (COALESCE(first_name,'')||' '||COALESCE(last_name,'')) LIKE ?1 ESCAPE '\\' ORDER BY updated_at DESC LIMIT ?2").all(like,limit);
+ }
+ topupTotal(userId){return this.db.prepare("SELECT COALESCE(SUM(amount),0) n FROM topups WHERE user_id=? AND status='approved'").get(userId).n}
+ pendingReceipts(limit=20){return this.db.prepare("SELECT * FROM topups WHERE status='pending' AND receipt_file_id IS NOT NULL ORDER BY created_at LIMIT ?").all(limit)}
+ broadcastTargets(){return this.db.prepare('SELECT id FROM users WHERE blocked=0 ORDER BY id').all().map(r=>r.id)}
  adminStats(){
   const now=this.now(),since={today:startOfDay(now),month:now-30*DAY,all:0},out={
    users:this.db.prepare('SELECT COUNT(*) n FROM users').get().n,
+   newToday:this.db.prepare('SELECT COUNT(*) n FROM users WHERE created_at>=?').get(startOfDay(now)).n,
+   newWeek:this.db.prepare('SELECT COUNT(*) n FROM users WHERE created_at>=?').get(now-7*DAY).n,
+   blocked:this.db.prepare('SELECT COUNT(*) n FROM users WHERE blocked=1').get().n,
    activeWeek:this.db.prepare('SELECT COUNT(DISTINCT user_id) n FROM activations WHERE created_at>=?').get(now-7*DAY).n,
    balances:this.db.prepare('SELECT COALESCE(SUM(balance),0) n FROM users').get().n,
    pendingTopups:this.db.prepare("SELECT COUNT(*) n FROM topups WHERE status='pending' AND receipt_file_id IS NOT NULL").get().n,

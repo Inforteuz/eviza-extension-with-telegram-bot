@@ -8,12 +8,12 @@ export async function inspectPassportPortrait(bytes,{python=defaultPython()}={})
  const result=await new Promise((resolve,reject)=>{
   const child=spawn(python,[fileURLToPath(new URL('./detect-face.py',import.meta.url))],{stdio:['pipe','pipe','ignore'],windowsHide:true});
   let output='';const timer=setTimeout(()=>{child.kill();reject(Error('Portretni aniqlash vaqti tugadi.'));},20000);
-  child.on('error',()=>{clearTimeout(timer);reject(Error('Serverda portret aniqlash (Python/OpenCV) sozlanmagan.'));});
+  child.on('error',()=>{clearTimeout(timer);reject(Error('Serverda portret aniqlash tizim paketi sozlanmagan. Administratorga xabar bering.'));});
   child.stdout.on('data',chunk=>{output+=chunk;if(output.length>4096)child.kill();});
   child.stdin.on('error',()=>{});child.stdin.end(normalized);
   child.on('close',code=>{clearTimeout(timer);try{if(code!==0)throw Error();resolve(JSON.parse(output));}catch{reject(Error('Portretni aniqlab bo‘lmadi.'));}});
  });
- if(result.error)throw Error(({no_face:'Yuz va tik yo‘nalish ishonchli aniqlanmadi. Tiniq pasport yoki alohida portret yuboring.',ambiguous_orientation:'Suratning tik yo‘nalishi noaniq. To‘g‘ri holatdagi tiniq pasport yuboring.',multiple_faces:'Bir nechta yuz yoki noaniq yo‘nalish topildi. Bitta pasportni tiniqroq yuboring.',detector_unavailable:'Portretni aniqlash modeli yoki Python/OpenCV o‘rnatilmagan.'})[result.error]||'Portret aniqlanmadi.');
+ if(result.error)throw Error(({no_face:'Yuz va tik yo‘nalish ishonchli aniqlanmadi. Tiniq pasport yoki alohida portret yuboring.',ambiguous_orientation:'Suratning tik yo‘nalishi noaniq. To‘g‘ri holatdagi tiniq pasport yuboring.',multiple_faces:'Bir nechta yuz yoki noaniq yo‘nalish topildi. Bitta pasportni tiniqroq yuboring.',detector_unavailable:'Portret aniqlash tizim paketi o‘rnatilmagan. Administratorga xabar bering.'})[result.error]||'Portret aniqlanmadi.');
  if(![0,90,180,270].includes(result.rotation))throw Error('Portret aylanishi noto‘g‘ri.');
  if(result.rotation)normalized=await imagePipeline(normalized,[{op:'rotate',deg:result.rotation}],{format:'png'},{python});
  const {width,height}=pngSize(normalized);
