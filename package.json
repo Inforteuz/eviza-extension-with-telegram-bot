@@ -1,0 +1,16 @@
+{
+  "name": "evisa-auto-filler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Saudi eVisa auto-filler: Chrome/Edge extension + paid Telegram bot + API server",
+  "scripts": {
+    "install:all": "npm ci --prefix server && npm ci --prefix e2e",
+    "test": "npm test --prefix server && npm test --prefix extension",
+    "test:e2e": "npm test --prefix e2e",
+    "start": "npm start --prefix server",
+    "pack:extension": "node extension/scripts/pack.mjs"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

@@ -1,0 +1,31 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
+        run: |
+          npm ci --prefix server
+          npm ci --prefix e2e
+          python -m pip install -r server/requirements.txt
+      - name: Unit tests
+        env:
+          PYTHON_BIN: python
+        run: |
+          npm test --prefix server
+          npm test --prefix extension
+          python server/test/detect_face_test.py
+      - name: Browser end-to-end tests
+        run: |
+          npx --prefix e2e playwright-core install --with-deps chromium
+          npm test --prefix e2e

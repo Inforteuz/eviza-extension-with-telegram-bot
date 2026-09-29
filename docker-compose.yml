@@ -1,0 +1,25 @@
+# Запуск: заполните server/.env, укажите свой домен в Caddyfile, затем:
+#   docker compose up -d --build
+services:
+  server:
+    build: ./server
+    env_file: ./server/.env
+    environment:
+      DATA_DIR: /data
+    volumes:
+      - evisa-data:/data
+    restart: unless-stopped
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on:
+      - server
+    restart: unless-stopped
+volumes:
+  evisa-data:
+  caddy-data:

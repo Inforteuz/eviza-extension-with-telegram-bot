@@ -1,0 +1,5 @@
+# Укажите свой домен (A-запись DNS должна указывать на этот сервер). HTTPS-сертификат выпускается автоматически.
+evisa.example.uz {
+	encode gzip
+	reverse_proxy server:8080
+}

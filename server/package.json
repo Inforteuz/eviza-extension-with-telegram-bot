@@ -1,0 +1,17 @@
+{
+  "name": "evisa-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "eVisa Auto-Filler: Telegram bot, billing and extension API",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "sharp": "^0.35.4"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

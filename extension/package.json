@@ -1,0 +1,13 @@
+{
+  "name": "evisa-auto-filler-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "pack": "node scripts/pack.mjs"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

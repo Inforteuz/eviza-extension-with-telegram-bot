@@ -1,1 +1,0 @@
-{"node":true,"sqlite":true,"images":true,"portraitDetector":true,"browserLibrary":true,"platform":"darwin","liveVisaTest":false}

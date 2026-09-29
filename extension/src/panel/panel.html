@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>eVisa Auto-Filler</title>
+<link rel="stylesheet" href="panel.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><img src="../../icons/icon32.png" alt=""><span>eVisa Auto-Filler</span></div>
+  <button class="icon-btn" id="settingsBtn" type="button" title="Sozlamalar" aria-label="Sozlamalar">⚙</button>
+</header>
+
+<main>
+  <!-- Connection -->
+  <section id="connectView" class="view" hidden>
+    <div class="card pad">
+      <h2>Hisobni ulash</h2>
+      <p class="muted">Kengaytma pullik xizmat. Balans va to‘lov Telegram bot orqali boshqariladi.</p>
+      <label class="field"><span>Server manzili</span><input id="serverUrl" type="url" placeholder="https://evisa.example.uz" autocomplete="off"></label>
+      <button class="btn primary wide" id="pairBtn" type="button">Telegram orqali ulash</button>
+      <div id="pairingBox" class="notice" hidden>
+        Telegram’da bot ochildi. <b>“✅ Ulash”</b> tugmasini bosing — panel o‘zi yangilanadi.
+        <button class="link" id="pairCancel" type="button">Bekor qilish</button>
+      </div>
+      <details class="token-box">
+        <summary>Token bilan ulash</summary>
+        <p class="muted small">Botdagi “🔌 Kengaytmani ulash” → “🔑 Token olish”.</p>
+        <label class="field"><input id="tokenInput" type="password" placeholder="evx_…" autocomplete="off"></label>
+        <button class="btn wide" id="tokenBtn" type="button">Ulash</button>
+      </details>
+    </div>
+  </section>
+
+  <!-- Main -->
+  <section id="mainView" class="view" hidden>
+    <div class="account card">
+      <div>
+        <div class="acc-name" id="accName"></div>
+        <div class="acc-balance"><b id="accBalance">—</b> <span class="muted" id="accPrice"></span></div>
+      </div>
+      <div class="acc-actions">
+        <button class="btn small" id="topupBtn" type="button">➕ To‘ldirish</button>
+        <button class="icon-btn" id="refreshBtn" type="button" title="Yangilash" aria-label="Balansni yangilash">↻</button>
+      </div>
+    </div>
+
+    <div class="mode card pad">
+      <div class="segmented" role="radiogroup" aria-label="Rejim">
+        <label><input type="radio" name="mode" value="individual" checked><span>Individual</span></label>
+        <label><input type="radio" name="mode" value="group"><span>Group</span></label>
+      </div>
+      <label class="field" id="groupField" hidden><span>Guruh nomi</span><input id="groupName" maxlength="40" placeholder="Masalan: Umra oktabr"></label>
+      <div id="groupState" class="muted small" hidden></div>
+    </div>
+
+    <label class="drop" id="drop">
+      <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
+      <div class="drop-icon">⬆</div>
+      <div><b>Pasport rasmlarini shu yerga tashlang</b><br><span class="muted">yoki bosib tanlang · JPG/PNG · bir martada 25 tagacha</span></div>
+      <div class="muted small" id="priceHint"></div>
+    </label>
+
+    <div class="toolbar">
+      <span class="muted small" id="counts"></span>
+      <span class="spacer"></span>
+      <button class="btn small ghost" id="manualBtn" type="button">＋ Qo‘lda</button>
+      <button class="btn small ghost" id="confirmAllBtn" type="button">✓ Barchasini tasdiqlash</button>
+    </div>
+    <ul class="list" id="list"></ul>
+    <p class="empty muted" id="emptyList">Hali arizachi yo‘q. Pasport rasmlarini yuklang.</p>
+  </section>
+
+  <!-- Editor -->
+  <section id="editorView" class="view" hidden>
+    <div class="editor-head">
+      <button class="icon-btn" id="editorBack" type="button" aria-label="Orqaga">←</button>
+      <h2 id="editorTitle">Arizachi</h2>
+    </div>
+    <div class="card pad portrait-edit">
+      <img id="editorPortrait" alt="Portret">
+      <div class="portrait-actions">
+        <button class="btn small" id="portraitUpload" type="button">Portret yuklash</button>
+        <button class="btn small ghost" id="portraitRecrop" type="button">Pasportdan qayta kesish</button>
+        <button class="btn small ghost" id="rereadBtn" type="button">Qayta o‘qish</button>
+        <input id="portraitInput" type="file" accept="image/jpeg,image/png" hidden>
+        <p class="muted small">200 × 200 JPEG, 5–100 KB. Yuz to‘liq ko‘rinsin.</p>
+      </div>
+    </div>
+    <div id="editorNotes" class="notice" hidden></div>
+    <form id="editorForm" class="card pad" autocomplete="off"></form>
+    <div class="editor-actions">
+      <button class="btn" id="editorSave" type="button">Saqlash</button>
+      <button class="btn primary" id="editorConfirm" type="button">Saqlash va tasdiqlash</button>
+    </div>
+  </section>
+
+  <!-- Settings -->
+  <section id="settingsView" class="view" hidden>
+    <div class="editor-head">
+      <button class="icon-btn" id="settingsBack" type="button" aria-label="Orqaga">←</button>
+      <h2>Sozlamalar</h2>
+    </div>
+    <form id="settingsForm" class="card pad" autocomplete="off">
+      <h3>Safar shabloni</h3>
+      <p class="muted small">Yangi arizachilarga avtomatik qo‘yiladi. Pasportdagi ma’lumotlar o‘zgartirilmaydi.</p>
+      <label class="field"><span>Safar maqsadi</span><select name="visitPurpose"><option>Umrah</option><option>Leisure</option><option value="Family &amp; Relatives">Family &amp; Relatives</option><option>Event</option></select></label>
+      <label class="field"><span>Turar joy turi</span><select name="accommodationType"><option value="Hotel">Mehmonxona (Hotel)</option><option value="Residential">Qarindosh / uy (Residential)</option></select></label>
+      <label class="field"><span>Mehmonxona / mezbon nomi</span><input name="accommodationName"></label>
+      <label class="field"><span>Saudiyadagi shahar (Residential)</span><input name="saudiCity"></label>
+      <label class="field"><span>Saudiyadagi manzil (Residential)</span><input name="saudiAddress"></label>
+      <label class="check"><input type="checkbox" name="pauseAfterEach"> Individual rejimda har bir ariza to‘lovga yetganda to‘xtash</label>
+      <div class="row">
+        <button class="btn primary" type="submit">Saqlash</button>
+        <button class="btn ghost" id="applyTrip" type="button">Ro‘yxatga qo‘llash</button>
+      </div>
+      <h3>Server</h3>
+      <label class="field"><span>Server manzili</span><input name="serverUrl" type="url" placeholder="https://evisa.example.uz"></label>
+      <button class="btn danger" id="logoutBtn" type="button">Hisobdan chiqish</button>
+    </form>
+  </section>
+</main>
+
+<footer class="run" id="runBar" hidden>
+  <div class="progress"><div class="bar" id="progressBar"></div></div>
+  <div class="run-message" id="runMessage"></div>
+  <div class="run-buttons">
+    <button class="btn primary" id="startBtn" type="button">▶ Boshlash</button>
+    <button class="btn danger" id="stopBtn" type="button" hidden>■ To‘xtatish</button>
+    <button class="btn ghost" id="clearBtn" type="button" title="Ro‘yxatni tozalash">🗑</button>
+  </div>
+  <details class="log"><summary>Jurnal</summary><ol id="log"></ol></details>
+</footer>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<script type="module" src="panel.js"></script>
+</body>
+</html>

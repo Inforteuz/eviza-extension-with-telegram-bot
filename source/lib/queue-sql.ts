@@ -1,3 +1,0 @@
-// One atomic SQL statement serializes access to the shared Saudi account.
-export const claimSql="UPDATE applications SET status='running',lease=?,lease_until=?,updated_at=?,version=version+1 WHERE id=(SELECT id FROM applications WHERE owner=? AND status='queued' ORDER BY created_at LIMIT 1) AND NOT EXISTS(SELECT 1 FROM applications WHERE owner=? AND status='running') RETURNING *";
-export const expireSql="UPDATE applications SET status='needs_review',note='Bajaruvchi bilan aloqa uzildi. Saytdagi arizani tekshiring.',lease=NULL,lease_until=NULL,updated_at=?,version=version+1 WHERE owner=? AND status='running' AND lease_until<?";
