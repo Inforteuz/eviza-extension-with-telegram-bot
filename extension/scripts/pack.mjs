@@ -31,6 +31,8 @@ for(const name of files){
 const centralSize=centrals.reduce((s,b)=>s+b.length,0),end=Buffer.alloc(22);
 end.writeUInt32LE(0x06054b50,0);end.writeUInt16LE(files.length,8);end.writeUInt16LE(files.length,10);end.writeUInt32LE(centralSize,12);end.writeUInt32LE(offset,16);
 mkdirSync(path.join(root,'dist'),{recursive:true});
-const out=path.join(root,'dist',`evisa-auto-filler-${manifest.version}.zip`);
-writeFileSync(out,Buffer.concat([...locals,...centrals,end]));
+const out=path.join(root,'dist',`evisa-auto-filler-${manifest.version}.zip`),zip=Buffer.concat([...locals,...centrals,end]);
+writeFileSync(out,zip);
+// Stable name for the download link served by Caddy (/download/evisa-auto-filler.zip).
+writeFileSync(path.join(root,'dist','evisa-auto-filler.zip'),zip);
 console.log(`${out} (${files.length} files${server?', server: '+server:''})`);

@@ -1,5 +1,13 @@
-# Укажите свой домен (A-запись DNS должна указывать на этот сервер). HTTPS-сертификат выпускается автоматически.
-evisa.example.uz {
+# Домен берётся из переменной DOMAIN (файл .env рядом с docker-compose.yml).
+# HTTPS-сертификат выпускается автоматически; A-запись домена должна указывать на сервер.
+{$DOMAIN} {
 	encode gzip
-	reverse_proxy server:8080
+	# Архив расширения для операторов: https://<домен>/download/evisa-auto-filler.zip
+	handle_path /download/* {
+		root * /srv/download
+		file_server
+	}
+	handle {
+		reverse_proxy server:8080
+	}
 }

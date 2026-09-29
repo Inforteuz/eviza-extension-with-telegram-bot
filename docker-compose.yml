@@ -1,5 +1,4 @@
-# Запуск: заполните server/.env, укажите свой домен в Caddyfile, затем:
-#   docker compose up -d --build
+# Запуск: bash deploy.sh <домен>  (или вручную: .env с DOMAIN=..., server/.env, затем docker compose up -d --build)
 services:
   server:
     build: ./server
@@ -11,15 +10,20 @@ services:
     restart: unless-stopped
   caddy:
     image: caddy:2
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN is not set - create .env with DOMAIN=your.domain}
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./extension/dist:/srv/download:ro
       - caddy-data:/data
+      - caddy-config:/config
     depends_on:
       - server
     restart: unless-stopped
 volumes:
   evisa-data:
   caddy-data:
+  caddy-config:

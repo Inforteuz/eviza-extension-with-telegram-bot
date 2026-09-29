@@ -34,11 +34,23 @@
 
 ## 2. Запуск сервера
 
-### Docker (рекомендуется)
+### Одной командой (рекомендуется)
+
+На чистом Ubuntu/Debian VPS под root:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Inforteuz/eviza-extension-with-telegram-bot/claude/affectionate-archimedes-yzozwx/deploy.sh -o deploy.sh
+bash deploy.sh evisa.example.uz
+```
+
+Скрипт ставит Docker, клонирует код в `/opt/evisa` и спрашивает токен бота. Telegram ID администратора он берёт из сообщения `/start`, отправленного боту. Затем спрашивает ключ OpenAI и номер карты (оба необязательны), собирает архив расширения с вшитым адресом сервера и запускает всё с HTTPS. Архив раздаётся по адресу `https://<домен>/download/evisa-auto-filler.zip`, и бот показывает эту ссылку. Повторный запуск обновляет код и сохраняет `server/.env` и базу.
+
+### Docker вручную
 
 ```bash
 cp server/.env.example server/.env      # заполнить: токен, ADMIN_IDS, OPENAI_API_KEY, оплата
-nano Caddyfile                           # вписать свой домен вместо evisa.example.uz
+echo "DOMAIN=evisa.example.uz" > .env    # домен для Caddy/HTTPS
+node extension/scripts/pack.mjs --server https://evisa.example.uz   # архив для /download/
 docker compose up -d --build
 docker compose logs -f server            # «eVisa server: ... · bot @имя_бота»
 ```
