@@ -9,7 +9,7 @@ import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const args=process.argv.slice(2),flag=name=>{const i=args.indexOf(name);return i>=0?args[i+1]:undefined};
 const server=flag('--server')||'';
-if(server&&!/^https:\/\/[^/\s]+$/.test(server.replace(/\/+$/,'')))throw Error('--server must look like https://your-domain.uz');
+if(server&&!/^https:\/\/[^/\s]+(\/[\w.~-]+)*$/.test(server.replace(/\/+$/,'')))throw Error('--server must look like https://your-domain.uz');
 const manifest=JSON.parse(readFileSync(path.join(root,'manifest.json'),'utf8'));
 const include=['manifest.json','icons','src'];
 const files=[];
