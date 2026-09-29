@@ -8,6 +8,8 @@ services:
     env_file: ./server/.env
     environment:
       DATA_DIR: /data
+      # The image's Python with OpenCV; overrides any PYTHON_BIN left in server/.env.
+      PYTHON_BIN: /opt/venv/bin/python
     ports:
       - "127.0.0.1:${SERVER_PORT:-8787}:8080"
     volumes:

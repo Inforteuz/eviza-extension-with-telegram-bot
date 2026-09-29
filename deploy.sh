@@ -291,8 +291,10 @@ for _ in $(seq 1 30); do
   sleep 2
 done
 [ "${OK:-}" = 1 ] || { docker compose logs --tail=40 server; die "Server ishga tushmadi (yuqoridagi logga qarang)."; }
-if docker compose exec -T server sh -c '"$PYTHON_BIN" -c "import cv2, numpy"' >/dev/null 2>&1; then say "Rasm bilan ishlash (OpenCV): OK"
-else warn "Konteynerda OpenCV ishlamadi — pasport rasmlari qabul qilinmaydi. 'cd $DIR && docker compose logs server' natijasini yuboring."; fi
+if CV_OUT="$(docker compose exec -T server sh -c '"$PYTHON_BIN" -c "import cv2, numpy; print(\"OpenCV\", cv2.__version__, \"NumPy\", numpy.__version__)"' 2>&1)"; then say "Rasm bilan ishlash: $CV_OUT"
+else warn "Konteynerda OpenCV ishlamadi — pasport rasmlari qabul qilinmaydi. Xato:
+$(printf '%s' "$CV_OUT" | tail -n 5)
+Shu natijani yuboring."; fi
 for _ in $(seq 1 30); do
   if curl -fsS -m 5 "$PUBLIC_BASE/health" >/dev/null 2>&1; then HTTPS=1; break; fi
   sleep 3
