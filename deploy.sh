@@ -111,11 +111,24 @@ if [ -z "$(get_env PAYMENT_PROVIDER_TOKEN)" ] && [ -z "$(get_env CARD_NUMBER)" ]
 fi
 
 # ---- Reverse proxy: our own Caddy when 80/443 are free, otherwise the host's nginx ----
-SERVER_PORT="${SERVER_PORT:-8787}"
-PORT_BUSY="$(ss -ltnp 2>/dev/null | awk -v p=":$SERVER_PORT" '$4 ~ p"$"' | grep -v docker || true)"
-[ -z "$PORT_BUSY" ] || die "$SERVER_PORT-port boshqa dastur tomonidan band:
+# Local port for the server container: explicit SERVER_PORT, else the one saved by an earlier run,
+# else the first free port from 8787. Ports held by our own container (docker-proxy) count as free.
+port_busy(){ ss -ltnp 2>/dev/null | awk -v p=":$1" '$4 ~ p"$"' | grep -v docker || true; }
+SAVED_PORT="$(grep -E '^SERVER_PORT=' .env 2>/dev/null | cut -d= -f2- || true)"
+if [ -n "${SERVER_PORT:-}" ]; then
+  PORT_BUSY="$(port_busy "$SERVER_PORT")"
+  [ -z "$PORT_BUSY" ] || die "$SERVER_PORT-port boshqa dastur tomonidan band:
 $PORT_BUSY
-Boshqa port bilan ishga tushiring: SERVER_PORT=8788 bash deploy.sh $TARGET"
+Boshqa port tanlang yoki SERVER_PORT ni bermang (bo'sh port o'zi topiladi)."
+else
+  SERVER_PORT="${SAVED_PORT:-8787}"
+  if [ -n "$(port_busy "$SERVER_PORT")" ]; then
+    for candidate in $(seq 8787 8899); do
+      if [ -z "$(port_busy "$candidate")" ]; then warn "$SERVER_PORT-port band, $candidate ishlatiladi."; SERVER_PORT="$candidate"; break; fi
+    done
+    [ -z "$(port_busy "$SERVER_PORT")" ] || die "8787–8899 oralig'ida bo'sh port topilmadi."
+  fi
+fi
 BUSY="$(ss -ltnp 2>/dev/null | grep -E ':(80|443)\s' | grep -v docker || true)"
 PROXY="${PROXY:-auto}"
 if [ "$PROXY" = auto ]; then
