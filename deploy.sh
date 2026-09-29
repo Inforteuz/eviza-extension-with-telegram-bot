@@ -134,8 +134,22 @@ else
   OTHER="$(nginx -T 2>/dev/null | awk -v d="$DOMAIN" -v own="evisa-$DOMAIN.conf" '
     /^# configuration file /{file=$4; sub(/:$/,"",file); next}
     /^[[:space:]]*server_name[[:space:]]/{line=$0; gsub(/;/," ",line); n=split(line,names," "); for(i=2;i<=n;i++) if(names[i]==d && index(file,own)==0) print file}' | sort -u)"
-  [ -z "$OTHER" ] || die "$DOMAIN nginx'da allaqachon boshqa saytga biriktirilgan: $OTHER
-Boshqa subdomen tanlang (masalan evisa.flyadeal.uz, DNS A yozuvi shu serverga) va: bash deploy.sh evisa.flyadeal.uz"
+  if [ -n "$OTHER" ]; then
+    [ "${REPLACE_NGINX_SITE:-}" = 1 ] || die "$DOMAIN nginx'da allaqachon boshqa saytga biriktirilgan: $OTHER
+Boshqa subdomen tanlang (masalan evisa.flyadeal.uz, DNS A yozuvi shu serverga) va: bash deploy.sh evisa.flyadeal.uz
+Agar o'sha sayt kerak bo'lmasa: REPLACE_NGINX_SITE=1 bash deploy.sh $DOMAIN (eski fayl /root/nginx-backup ga saqlanadi)"
+    # Replace only a site that serves nothing but this domain; keep a backup of it.
+    BACKUP_DIR="/root/nginx-backup/$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$BACKUP_DIR"
+    for f in $OTHER; do
+      [ -e "$f" ] || die "Topilmadi: $f"
+      EXTRA="$(awk '/^[[:space:]]*server_name[[:space:]]/{gsub(/;/," "); for(i=2;i<=NF;i++) print $i}' "$f" | sort -u | grep -vxF "$DOMAIN" || true)"
+      [ -z "$EXTRA" ] || die "$f boshqa domenlarga ham xizmat qiladi ($(echo "$EXTRA" | tr '\n' ' ')) — uni avtomatik o'chirmayman."
+      cp -L "$f" "$BACKUP_DIR/$(basename "$f")"
+      rm -f "$f"
+      warn "O'chirildi: $f (nusxa: $BACKUP_DIR/$(basename "$f"))"
+    done
+  fi
 
   say "Ishga tushirish: server (127.0.0.1:$SERVER_PORT) + mavjud nginx"
   docker compose --profile caddy rm -sf caddy >/dev/null 2>&1 || true
