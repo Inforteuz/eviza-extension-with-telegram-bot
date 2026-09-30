@@ -52,6 +52,24 @@ test('readonly calendar activates the actual day link without closing it on blur
  await pickDate(page,'Date of Birth','1968-09-05');assert.equal(value,'05/09/1968');assert.deepEqual(selection,['1968','September']);
 });
 
+test('calendar with short month names and a narrow year list steps to the wanted year',async()=>{
+ let value='',low=2016;const picks=[];
+ const notFound=label=>Object.assign(new Attention('needs_input','Kerakli tanlov topilmadi: '+label),{code:'option_not_found'});
+ const field={inputValue:async()=>value,isEditable:async()=>false,press:async()=>{},click:async()=>{}};
+ const page={
+  getByRole:(role,{name})=>{
+   if(role==='textbox')return field;
+   if(role==='link')return {dispatchEvent:async()=>{value='05/09/1968'}};
+   if(name==='Change the year')return {waitFor:async()=>{},selectOption:async({label})=>{const y=Number(label);if(y<low||y>low+20)throw notFound(label);picks.push(label);low=y-10}};
+   return {selectOption:async({label})=>{if(label.length>3)throw notFound(label);picks.push(label)}};
+  },
+  snapshot:async()=>({controls:[{label:'Change the year',options:Array.from({length:21},(_,i)=>({label:String(low+i)}))}]}),
+  waitForFunction:async()=>{},
+ };
+ await pickDate(page,'Date of Birth','1968-09-05');
+ assert.equal(value,'05/09/1968');assert.deepEqual(picks,['2016','2006','1996','1986','1976','1968','Sep']);
+});
+
 test('custom choices toggle only when needed and reject an unaccepted change',async()=>{
  let checked=false,clicks=0;
  const field={isChecked:async()=>checked,dispatchEvent:async()=>{checked=!checked;clicks++}};

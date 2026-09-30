@@ -10,6 +10,19 @@ const insurancePattern=/^\/Insurance\/ChooseInsurance\/[0-9a-f-]{36}$/i;
 const remainingPattern=/^\/(Insurance\/ChooseInsurance|Visa\/(Terms|Review))\/[0-9a-f-]{36}$/i;
 export function validDraft(url){try{const u=new URL(url);return u.origin===ORIGIN&&draftPattern.test(u.pathname)&&!u.search&&!u.hash}catch{return false}}
 export async function typeName(page,name,value){const field=page.getByRole('textbox',{name,exact:true});if(await field.inputValue()===value)return;await field.fill('');if(value)await field.pressSequentially(value);if(await field.inputValue()!==value)throw new Attention('needs_review','Sayt '+name+' maydonini saqlamadi.');}
+// A narrow year list (jQuery UI yearRange "c-10:c+10") is re-centred on each pick,
+// so step to its edge until the wanted year appears.
+async function selectYear(page,picker,year){
+ let previous='';
+ for(let step=0;step<15;step++){
+  try{await picker.selectOption({label:year});return}catch(error){if(error.code!=='option_not_found'||!page.snapshot)throw error}
+  const years=((await page.snapshot())?.controls||[]).find(c=>c.label==='Change the year')?.options?.map(o=>Number(o.label)).filter(Number.isFinite)||[];
+  const low=Math.min(...years),high=Math.max(...years),range=low+':'+high;
+  if(!years.length||range===previous||(Number(year)>=low&&Number(year)<=high))break;
+  previous=range;await picker.selectOption({label:String(Number(year)<low?low:high)});
+ }
+ throw new Attention('needs_input',`Saytdagi kalendarda ${year}-yil topilmadi. Ariza kartasidagi sanani tekshiring.`,'personal');
+}
 export async function pickDate(page,label,iso){
  const [year,month,day]=iso.split('-');const expected=`${day}/${month}/${year}`;const field=page.getByRole('textbox',{name:label,exact:true});
  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -22,8 +35,10 @@ export async function pickDate(page,label,iso){
   await field.press('Tab');await field.click();
   const yearPicker=page.getByRole('combobox',{name:'Change the year',exact:true});
   try{await yearPicker.waitFor({state:'visible',timeout:1500})}catch{continue}
-  await yearPicker.selectOption({label:year});
-  await page.getByRole('combobox',{name:'Change the month',exact:true}).selectOption({label:months[Number(month)-1]});
+  await selectYear(page,yearPicker,year);
+  // The month list may show full (September) or short (Sep) names.
+  const monthPicker=page.getByRole('combobox',{name:'Change the month',exact:true}),monthName=months[Number(month)-1];
+  try{await monthPicker.selectOption({label:monthName})}catch(error){if(error.code!=='option_not_found')throw error;await monthPicker.selectOption({label:monthName.slice(0,3)})}
   // The site places this popup below another form layer. Dispatch to the
   // observed day link without changing focus (blur closes the date picker).
   await page.getByRole('link',{name:String(Number(day)),exact:true}).dispatchEvent('click');

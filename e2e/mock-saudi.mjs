@@ -1,14 +1,21 @@
 // A small stand-in for visa.visitsaudi.com, served through Playwright routing.
 // Labels, ids and page order follow what the form flows were live-tested on.
 import {randomUUID} from 'node:crypto';
+import {readFileSync} from 'node:fs';
+
+// Date fields on the real site are readonly jQuery UI datepickers that open on focus.
+// The mock uses the hardest variant: short month names and a narrow, re-centred year list.
+const assets={'/__assets/jquery.js':readFileSync(new URL('./node_modules/jquery/dist/jquery.min.js',import.meta.url)),'/__assets/jquery-ui.js':readFileSync(new URL('./node_modules/jquery-ui/dist/jquery-ui.min.js',import.meta.url))};
+const datepicker=`<script src="/__assets/jquery.js"></script><script src="/__assets/jquery-ui.js"></script><script>$(function(){$('input.date').datepicker({dateFormat:'dd/mm/yy',changeMonth:true,changeYear:true,yearRange:'c-10:c+10',selectMonthLabel:'Change the month',selectYearLabel:'Change the year'})})</script>`;
 
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
-const page=(title,body)=>`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font:14px sans-serif;margin:20px}label{display:block;margin-top:6px}.fake-file{opacity:0;position:absolute;width:1px}</style></head><body><h1>${esc(title)}</h1>${body}</body></html>`;
+const page=(title,body)=>`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font:14px sans-serif;margin:20px}label{display:block;margin-top:6px}.fake-file{opacity:0;position:absolute;width:1px}</style></head><body><h1>${esc(title)}</h1>${body}${body.includes('class="date"')?datepicker:''}</body></html>`;
 const options=(list,sel='')=>['<option value="">Select</option>',...list.map(o=>`<option value="${esc(o)}"${o===sel?' selected':''}>${esc(o)}</option>`)].join('');
 const countries=['Kazakhstan','Russia','Saudi Arabia','Turkey','Uzbekistan'];
 const iso=v=>{const m=String(v||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);return m?`${m[3]}-${m[2]}-${m[1]}`:''};
 const dmy=v=>v?v.split('-').reverse().join('/'):'';
 const text=(label,name,value='')=>`<label for="${name}">${esc(label)} <span class="req">*</span></label><input type="text" id="${name}" name="${name}" value="${esc(value)}">`;
+const date=(label,name)=>`<label for="${name}">${esc(label)} <span class="req">*</span></label><input type="text" class="date" readonly id="${name}" name="${name}" value="">`;
 const select=(label,name,list)=>`<label for="${name}">${esc(label)} <span>*</span></label><select id="${name}" name="${name}">${options(list)}</select>`;
 
 function parseMultipart(buffer,contentType){
@@ -47,14 +54,14 @@ export function createMockSaudi(){
   personal:group=>page('Personal Information',`${groupHeader(group)}<form method="post" enctype="multipart/form-data">
 <fieldset><legend>Are you applying from outside your country of residence?</legend><input type="radio" id="q1y" name="Q1" value="yes"><label for="q1y">Yes</label><input type="radio" id="q1n" name="Q1" value="no"><label for="q1n">No</label></fieldset>
 ${select('Country of Nationality','Nationality',countries)}${select('Gender','Gender',['Male','Female'])}${select('Marital Status','MaritalStatus',['Single','Married','Divorced','Widow','Other'])}
-${select('Country of Birth','BirthCountry',countries)}${text('Date of Birth','BirthDate')}${select('Country','Country',countries)}
+${select('Country of Birth','BirthCountry',countries)}${date('Date of Birth','BirthDate')}${select('Country','Country',countries)}
 <label for="AttachmentPersonalPicture">Personal Photo</label><input type="file" class="fake-file" id="AttachmentPersonalPicture" name="Picture" accept="image/*">
 ${text('First Name or Given Name (English)','FirstName')}${text('Father Name or Middle Name (English)','MiddleName')}${text('Last Name or Family Name (English)','LastName')}
 ${text('City of Birth','BirthCity')}${text('Profession','Profession')}${text('City','City')}${text('Address','Address')}<label for="Zip">Zip/Postal Code</label><input type="text" id="Zip" name="Zip">
 <button type="submit">Next</button><a href="/Visa/Index">Back</a></form>`),
   passport:a=>page('Passport Information',`${groupHeader(a.group)}<p>Application No.: ${a.number}</p><form method="post">
 ${select('Passport Type','PassportType',['Regular Passport','Diplomatic Passport'])}${text('Passport No.','PassportNo')}${text('Passport Issue Place (Country or City)','IssuePlace')}
-${text('Passport Issue Date','IssueDate')}${text('Passport Expiry Date','ExpiryDate')}${text('Expected Date of Arrival','Arrival')}${text('Expected Date of Departure','Departure')}
+${date('Passport Issue Date','IssueDate')}${date('Passport Expiry Date','ExpiryDate')}${date('Expected Date of Arrival','Arrival')}${date('Expected Date of Departure','Departure')}
 <fieldset><legend>Additional Purpose of Visit</legend>${['Event','Family & Relatives','Leisure','Umrah'].map((p,i)=>`<input type="checkbox" id="purpose${i}" name="Purpose" value="${esc(p)}"><label for="purpose${i}">${esc(p)}</label>`).join('')}</fieldset>
 <input type="radio" id="rdEmailYes" name="EmailNotify" value="yes"><label for="rdEmailYes">Send by email</label><input type="radio" id="rdEmailNo" name="EmailNotify" value="no"><label for="rdEmailNo">Do not send by email</label>
 <input type="radio" id="rdWhatsAppYes" name="WhatsApp" value="yes"><label for="rdWhatsAppYes">Send by WhatsApp</label><input type="radio" id="rdWhatsAppNo" name="WhatsApp" value="no"><label for="rdWhatsAppNo">Do not send by WhatsApp</label>
@@ -81,6 +88,7 @@ ${a.group?`<a id="btnAddMoreToGroup" href="/Visa/PersonalInfo?gName=${encodeURIC
   const request=route.request(),url=new URL(request.url()),path=url.pathname,method=request.method();
   if(path==='/__pay'){site.payClicks++;return route.fulfill({status:204})}
   if(path==='/favicon.ico')return route.fulfill({status:404});
+  if(assets[path])return route.fulfill({status:200,contentType:'text/javascript',body:assets[path]});
   if(site.rateLimited)return route.fulfill({status:429,contentType:'text/html',body:page('Error 1015','<p>You are being rate limited</p><p>Ray ID: a3c79bcf2994eec9</p>')});
   if(path.startsWith('/Login')){if(method==='POST'){site.loggedIn=true;return route.fulfill(redirect('/Visa/Index'))}return route.fulfill(html(routes.login()))}
   if(!site.loggedIn)return route.fulfill(redirect('/Login'));

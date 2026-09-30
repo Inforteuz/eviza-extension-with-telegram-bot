@@ -80,7 +80,9 @@
    const choice=['radio','checkbox'].includes(e.type),calendar=e.matches('a')&&!!e.closest('#ui-datepicker-div')&&/^\d{1,2}$/.test(n),field=e.matches(roleSelectors.textbox),allowed=['btnApplyGroupVisa','btnCreateGroup'].includes(e.id)||/^(Next|Apply For Individual)$/i.test(n)||addMember.test(n);
    if(!choice&&!calendar&&!field&&!allowed)throw fail('Bu tugma avtomatik bosilmaydi.','forbidden');
    if(e.matches('a[href]')&&e.getAttribute('href')!=='#'&&!e.getAttribute('href').startsWith('javascript:')){const u=new URL(e.href);if(u.origin!==location.origin)throw fail('Tashqi havola ochilmaydi.')}
-   if(choice||calendar||field){e.click();return {value:true}}
+   // A real click focuses a field first; the site's date pickers open on focus (the inputs are readonly).
+   if(field){const mouse=type=>e.dispatchEvent(new MouseEvent(type,{bubbles:true,cancelable:true,view:window}));mouse('mousedown');e.focus();mouse('mouseup');e.click();return {value:true}}
+   if(choice||calendar){e.click();return {value:true}}
    if(!visible(e))throw fail('Tugma ko‘rinmayapti.');return {value:true,click:e};
   }
   throw fail('Amal qo‘llanmagan.');
