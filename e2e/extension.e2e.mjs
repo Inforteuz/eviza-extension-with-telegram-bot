@@ -125,8 +125,12 @@ test('pair via Telegram, read passports, fill individual applications and a grou
  assert.ok(f.tg.some(c=>c.method==='sendMessage'&&/to‘lovga tayyor/.test(c.body.text)),'Telegram notification');
 
  // 5. Group of three: the first two passports are re-uploaded (free within 30 days) plus a new one.
+ // A file the operator adds while “Tozalash” is still running must survive it.
+ const idb=(op,id)=>f.worker.evaluate(([op,id])=>new Promise((ok,no)=>{const r=indexedDB.open('evisa-images',1);r.onsuccess=()=>{const t=r.result.transaction('images',op==='put'?'readwrite':'readonly'),s=t.objectStore('images'),q=op==='put'?s.put(new Blob(['x']),id):s.get(id);t.oncomplete=()=>{r.result.close();ok(!!q.result)};t.onerror=()=>no(t.error)};r.onerror=()=>no(r.error)}),[op,id]);
+ await idb('put','added-during-clear');
  await panel.click('#clearBtn');
  await waitFor(async()=>(await storage('applicants')).length===0,{label:'clear'});
+ assert.equal(await idb('get','added-during-clear'),true,'clear removes only the cleared applicants’ images');
  await panel.setInputFiles('#fileInput',f.images);
  await waitFor(async()=>{const l=await storage('applicants');return l?.length===3&&l.every(a=>a.status==='review')},{label:'group recognition'});
  assert.equal(f.billing.user(USER).balance,85000,'only the new passport is charged');

@@ -1,6 +1,6 @@
 import {Store,defaults} from './lib/store.js';
 import {apiRequest,ApiError,normalizeServerUrl} from './lib/api.js';
-import {getImage,deleteImages,clearImages} from './lib/images.js';
+import {getImage,deleteImages} from './lib/images.js';
 import {Runner} from './lib/runner.js';
 import {newApplicant,normalizeData,derive,previewData,confirmationFor,mergeRecognition,lockedStatuses,sha256,displayName} from './lib/applicants.js';
 import {applyPreparationDefaults,missingFields,cleanTripDefaults} from './lib/domain.js';
@@ -186,7 +186,9 @@ const handlers={
  'run:clear':async()=>{
   if(runner.busy())throw Error('Avval jarayonni to‘xtating.');
   const ids=store.get('applicants').map(a=>a.id);
-  await store.set('applicants',[]);await store.removePortraits(ids);await store.set('flow',{});await clearImages().catch(()=>{});
+  // Only the cleared applicants' images: the operator may already be adding new files.
+  // The list empties last, once everything else is gone.
+  await deleteImages(ids).catch(()=>{});await store.removePortraits(ids);await store.set('flow',{});await store.set('applicants',[]);
   await store.set('run',{...defaults().run,mode:store.get('run').mode});await store.set('log',[]);
  },
  'trip:apply':async()=>{

@@ -16,4 +16,3 @@ async function tx(mode,fn){
 export const putImage=(id,blob)=>tx('readwrite',s=>{s.put(blob,id)});
 export const getImage=id=>tx('readonly',s=>s.get(id));
 export const deleteImages=ids=>tx('readwrite',s=>{for(const id of ids)s.delete(id)});
-export const clearImages=()=>tx('readwrite',s=>{s.clear()});
