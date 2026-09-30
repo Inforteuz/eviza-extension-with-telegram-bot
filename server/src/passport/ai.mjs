@@ -2,18 +2,22 @@ import {parseMrz} from './mrz.mjs';
 import {uprightPassportForReading} from './portrait.mjs';
 
 export const defaultPassportModel='gpt-4.1';
-// Tried in order; a busy (503/429) or missing model falls through to the next one.
+// Tried in order: the requested flash models first, then the lighter models that stay
+// available when Google reports "high demand" for the big ones.
 // GEMINI_MODEL may be one model or a comma-separated list; GEMINI_THINKING sets the reasoning level.
-export const defaultGeminiModels=['gemini-3.7-flash','gemini-3.6-flash','gemini-3.5-flash'];
+export const defaultGeminiModels=['gemini-3.7-flash','gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash','gemini-3.5-flash-lite','gemini-flash-lite-latest','gemini-3.1-flash-lite'];
 export const defaultGeminiThinking='high';
-// The model that answered last is tried first for a while, then the preferred order is retried.
-const STICKY_MS=10*60000;
-let lastGood=null;
+// The model that answered last is tried first for a while; a busy model (503/429/timeout)
+// goes to the end of the list for a few minutes, so later passports skip it at once.
+const STICKY_MS=10*60000,COOLDOWN_MS=3*60000;
+let lastGood=null;const busyUntil=new Map();
 export function geminiOrder(models,now=Date.now()){
- if(!lastGood||now-lastGood.at>STICKY_MS||!models.includes(lastGood.model))return models;
- return [lastGood.model,...models.filter(m=>m!==lastGood.model)];
+ const resting=m=>busyUntil.get(m)>now;
+ const order=[...models.filter(m=>!resting(m)),...models.filter(resting)];
+ if(!lastGood||now-lastGood.at>STICKY_MS||!models.includes(lastGood.model))return order;
+ return [lastGood.model,...order.filter(m=>m!==lastGood.model)];
 }
-export function resetGeminiPreference(){lastGood=null}
+export function resetGeminiPreference(){lastGood=null;busyUntil.clear()}
 const validDate=s=>{if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;const d=new Date(s+'T00:00:00Z');return !Number.isNaN(+d)&&d.toISOString().slice(0,10)===s;};
 export class PassportAiError extends Error{constructor(message){super(message);this.name='PassportAiError';this.safeToDisplay=true}}
 const identityFields=['firstName','middleName','lastName','nationality','birthDate','gender','birthCountry','birthCity','passportNumber','issueDate','expiryDate','passportIssuePlace'];
@@ -122,7 +126,7 @@ async function readWithOpenAi(image,config,fetchImpl){
  let raw;try{raw=JSON.parse(content.filter(c=>c.type==='output_text').map(c=>c.text).join(''))}catch{throw new PassportAiError(readerMessages.badFormat)}
  return {raw,usage:{inputTokens:response.usage?.input_tokens||0,outputTokens:response.usage?.output_tokens||0}};
 }
-async function readWithGemini(image,config,fetchImpl,{sleep=ms=>new Promise(r=>setTimeout(r,ms)),now=Date.now,budgetMs=100000}={}){
+async function readWithGemini(image,config,fetchImpl,{sleep=ms=>new Promise(r=>setTimeout(r,ms)),now=Date.now,budgetMs=100000,hedgeMs=12000,callMs=60000}={}){
  const configured=String(config.GEMINI_MODEL||'').split(',').map(m=>m.trim()).filter(Boolean);
  const models=configured.length?configured:defaultGeminiModels;
  const thinking=config.GEMINI_THINKING===undefined||config.GEMINI_THINKING===''?defaultGeminiThinking:String(config.GEMINI_THINKING).toLowerCase();
@@ -132,47 +136,79 @@ async function readWithGemini(image,config,fetchImpl,{sleep=ms=>new Promise(r=>s
   // Room for the model's reasoning tokens as well as the JSON answer.
   generationConfig:{responseMimeType:'application/json',responseSchema:geminiSchema(passportSchema),temperature:0,maxOutputTokens:16384,...(withThinking&&thinking!=='off'?{thinkingConfig:{thinkingLevel:thinking}}:{})},
  });
- let lastError=null;
  // The extension waits 120 s for the whole upload; stop trying models well before that.
  const deadline=now()+budgetMs;
- // Up to three rounds over all models: a demand spike (503) usually clears within seconds.
+ const rest=model=>{busyUntil.set(model,now()+COOLDOWN_MS);if(lastGood?.model===model)lastGood=null};
+ // One model. Resolves {value} | {error,retry} | {stop} | {aborted}; never rejects.
+ const attempt=async(model,signal)=>{
+  const started=now();let withThinking=true;
+  for(;;){
+   const left=deadline-now();
+   if(left<5000)return {stop:true};
+   let r,response=null;
+   try{r=await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{method:'POST',headers:{'x-goog-api-key':config.GEMINI_API_KEY,'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.any([signal,AbortSignal.timeout(Math.min(left,callMs))]),body:request(withThinking)})}
+   catch{if(signal.aborted)return {aborted:true};console.warn(`Gemini ${model}: timeout`);rest(model);return {retry:true,error:new PassportAiError(readerMessages.timeout)}}
+   try{response=await r.json()}catch{/* empty body */}
+   if(signal.aborted)return {aborted:true};
+   if(r.ok){
+    // An unfinished or malformed answer is this model's problem: the next one may do better.
+    const candidate=response?.candidates?.[0];
+    if(response?.promptFeedback?.blockReason||!candidate||!['STOP',undefined].includes(candidate.finishReason)){console.warn(`Gemini ${model}: ${candidate?.finishReason||'blocked'}`);return {retry:true,error:new PassportAiError(readerMessages.incomplete)}}
+    const text=(candidate.content?.parts||[]).filter(p=>typeof p.text==='string'&&!p.thought).map(p=>p.text).join('').trim().replace(/^```(?:json)?\s*|\s*```$/g,'');
+    let raw;try{raw=JSON.parse(text)}catch{console.warn(`Gemini ${model}: bad JSON`);return {retry:true,error:new PassportAiError(readerMessages.badFormat)}}
+    lastGood={model,at:now()};busyUntil.delete(model);
+    console.log(`Gemini ${model}: ok ${now()-started} ms`);
+    return {value:{raw,model,usage:{inputTokens:response.usageMetadata?.promptTokenCount||0,outputTokens:response.usageMetadata?.candidatesTokenCount||0,thinkingTokens:response.usageMetadata?.thoughtsTokenCount||0}}};
+   }
+   // Details stay in the server log; operators only see a neutral message.
+   const detail=String(response?.error?.message||'');
+   console.warn(`Gemini ${model}: ${r.status} ${detail.slice(0,200)}`);
+   // A model without reasoning levels: ask it again without thinkingConfig.
+   if(r.status===400&&withThinking&&/thinking/i.test(detail)){withThinking=false;continue}
+   const error=geminiError(r.status,response);
+   if([503,500,429,404].includes(r.status)){rest(model);return {retry:true,error}}
+   return {error};
+  }
+ };
+ // One pass over the list: a failure starts the next model at once, a slow model gets
+ // company after hedgeMs (at most two in flight), and the first good answer wins.
+ let lastError=null;
+ const pass=()=>new Promise(resolve=>{
+  const queue=geminiOrder(models,now()),controllers=new Set();let running=0,done=false,timer=null;
+  const finish=out=>{if(done)return;done=true;clearTimeout(timer);for(const c of controllers)c.abort();resolve(out)};
+  const launch=()=>{
+   clearTimeout(timer);
+   if(done)return;
+   const model=queue.shift();
+   if(!model){if(!running)finish({});return}
+   const controller=new AbortController();controllers.add(controller);running++;
+   attempt(model,controller.signal).catch(()=>({retry:true,error:new PassportAiError(readerMessages.failed)})).then(out=>{
+    running--;controllers.delete(controller);
+    if(done||out.aborted)return;
+    if(out.value)return finish(out);
+    if(out.stop)return running?undefined:finish({});
+    lastError=out.error||lastError;
+    if(!out.retry)return finish({fatal:true});
+    if(running<2)launch();
+   });
+   timer=setTimeout(()=>{if(!done&&running<2)launch()},hedgeMs);
+  };
+  launch();
+ });
+ // Up to three passes: a demand spike (503) usually clears within seconds.
  for(let round=0;round<3;round++){
   if(round){if(deadline-now()<15000)break;await sleep(round*2000)}
-  for(const model of geminiOrder(models)){
-   let withThinking=true;
-   for(let attempt=0;attempt<2;attempt++){
-    const left=deadline-now();
-    if(left<5000)throw lastError||new PassportAiError(readerMessages.timeout);
-    let r,response=null;
-    try{r=await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{method:'POST',headers:{'x-goog-api-key':config.GEMINI_API_KEY,'Content-Type':'application/json'},redirect:'error',signal:AbortSignal.timeout(Math.min(left,75000)),body:request(withThinking)})}
-    catch{console.warn(`Gemini ${model}: timeout`);lastError=new PassportAiError(readerMessages.timeout);break}
-    try{response=await r.json()}catch{/* empty body */}
-    if(r.ok){
-     const candidate=response?.candidates?.[0];
-     if(response?.promptFeedback?.blockReason||!candidate||!['STOP',undefined].includes(candidate.finishReason))throw new PassportAiError(readerMessages.incomplete);
-     const text=(candidate.content?.parts||[]).filter(p=>typeof p.text==='string'&&!p.thought).map(p=>p.text).join('').trim().replace(/^```(?:json)?\s*|\s*```$/g,'');
-     let raw;try{raw=JSON.parse(text)}catch{throw new PassportAiError(readerMessages.badFormat)}
-     lastGood={model,at:now()};
-     return {raw,model,usage:{inputTokens:response.usageMetadata?.promptTokenCount||0,outputTokens:response.usageMetadata?.candidatesTokenCount||0,thinkingTokens:response.usageMetadata?.thoughtsTokenCount||0}};
-    }
-    // Details stay in the server log; operators only see a neutral message.
-    const detail=String(response?.error?.message||'');
-    console.warn(`Gemini ${model}: ${r.status} ${detail.slice(0,200)}`);
-    // A model without reasoning levels: ask it again without thinkingConfig.
-    if(r.status===400&&withThinking&&/thinking/i.test(detail)){withThinking=false;continue}
-    lastError=geminiError(r.status,response);
-    if([503,500,429,404].includes(r.status))break;
-    throw lastError;
-   }
-  }
+  const out=await pass();
+  if(out.value)return out.value;
+  if(out.fatal||deadline-now()<5000)break;
  }
- throw lastError||new PassportAiError(readerMessages.failed);
+ throw lastError||new PassportAiError(readerMessages.timeout);
 }
-export async function readPassportAi(bytes,config,{fetchImpl=fetch,inspectPortrait,prepareImage,sleep,now,budgetMs}={}){
+export async function readPassportAi(bytes,config,{fetchImpl=fetch,inspectPortrait,prepareImage,sleep,now,budgetMs,hedgeMs}={}){
  const provider=aiProvider(config);
  if(!provider||(provider==='openai'&&!config.OPENAI_API_KEY)||(provider==='gemini'&&!config.GEMINI_API_KEY))throw new PassportAiError('Tizim paketi ulanmagan. Administratorga xabar bering.');
  const image=await (prepareImage?prepareImage(bytes):uprightPassportForReading(bytes,{inspect:inspectPortrait,...(config.PYTHON_BIN?{python:config.PYTHON_BIN}:{})}));
- const options=Object.fromEntries(Object.entries({sleep,now,budgetMs}).filter(([,v])=>v!==undefined));
+ const options=Object.fromEntries(Object.entries({sleep,now,budgetMs,hedgeMs}).filter(([,v])=>v!==undefined));
  const {raw,usage,model}=provider==='gemini'?await readWithGemini(image,config,fetchImpl,options):await readWithOpenAi(image,config,fetchImpl);
  return {...validateAiPassport(raw),usage,provider,model:model||config.PASSPORT_AI_MODEL||(provider==='openai'?defaultPassportModel:'')};
 }

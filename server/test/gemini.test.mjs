@@ -39,26 +39,39 @@ test('Gemini: 3.7 flash first, key in a header, high thinking, JSON answer witho
   assert.equal(body.tools,undefined);
   return ok();
  }});
- assert.deepEqual(seen,['gemini-3.7-flash']);assert.deepEqual(defaultGeminiModels,['gemini-3.7-flash','gemini-3.6-flash','gemini-3.5-flash']);
+ assert.deepEqual(seen,['gemini-3.7-flash']);assert.deepEqual(defaultGeminiModels.slice(0,4),['gemini-3.7-flash','gemini-3.8-flash','gemini-3.6-flash','gemini-3.5-flash']);assert.ok(defaultGeminiModels.slice(4).every(m=>/lite/.test(m)),'lighter models are the last resort');
  assert.equal(data.firstName,'ANNA');assert.equal(data.provider,'gemini');assert.equal(data.model,'gemini-3.7-flash');
  assert.deepEqual(data.usage,{inputTokens:10,outputTokens:20,thinkingTokens:30});
 }));
 
-test('Gemini: busy models switch to the next one, and the one that answered stays first',quiet(async()=>{
+test('Gemini: busy models switch to the next one, the one that answered stays first and busy ones rest',quiet(async()=>{
  const seen=[];
- const fetchImpl=async url=>{const m=modelOf(url);seen.push(m);return m==='gemini-3.5-flash'?ok():fail(m==='gemini-3.7-flash'?503:429)};
+ const fetchImpl=async url=>{const m=modelOf(url);seen.push(m);return m==='gemini-3.5-flash-lite'?ok():fail(m==='gemini-3.7-flash'?503:429)};
  const data=await readPassportAi(Buffer.from('jpeg'),{GEMINI_API_KEY:'g'},{prepareImage,sleep,fetchImpl});
- assert.deepEqual(seen,['gemini-3.7-flash','gemini-3.6-flash','gemini-3.5-flash']);assert.equal(data.model,'gemini-3.5-flash');
- assert.deepEqual(geminiOrder(defaultGeminiModels),['gemini-3.5-flash','gemini-3.7-flash','gemini-3.6-flash']);
+ assert.deepEqual(seen,defaultGeminiModels.slice(0,5));assert.equal(data.model,'gemini-3.5-flash-lite');
+ const order=geminiOrder(defaultGeminiModels);
+ assert.equal(order[0],'gemini-3.5-flash-lite');assert.deepEqual(order.slice(-4),defaultGeminiModels.slice(0,4),'busy models go last');
  seen.length=0;await readPassportAi(Buffer.from('jpeg'),{GEMINI_API_KEY:'g'},{prepareImage,sleep,fetchImpl});
- assert.deepEqual(seen,['gemini-3.5-flash']);
- // The preference expires, so a recovered 3.7 is used again.
+ assert.deepEqual(seen,['gemini-3.5-flash-lite'],'the next passport goes straight to the model that works');
+ // Rest and preference expire, so a recovered 3.7 is used again.
  assert.deepEqual(geminiOrder(defaultGeminiModels,Date.now()+11*60000),defaultGeminiModels);
+}));
+
+test('Gemini: a slow model gets a parallel backup and the first good answer wins',quiet(async()=>{
+ const aborted=[];
+ const fetchImpl=(url,{signal})=>new Promise((resolve,reject)=>{
+  const m=modelOf(url);
+  signal.addEventListener('abort',()=>{aborted.push(m);reject(new DOMException('aborted','AbortError'))});
+  if(m==='fast')setTimeout(()=>resolve(ok()),20);
+ });
+ const started=Date.now();
+ const data=await readPassportAi(Buffer.from('jpeg'),{GEMINI_API_KEY:'g',GEMINI_MODEL:'slow,fast'},{prepareImage,sleep,hedgeMs:50,fetchImpl});
+ assert.equal(data.model,'fast');assert.ok(Date.now()-started<1000);assert.deepEqual(aborted,['slow'],'the slow call is cancelled');
 }));
 
 test('Gemini: a demand spike on every model is retried in later rounds',quiet(async()=>{
  let calls=0,pauses=0;
- const data=await readPassportAi(Buffer.from('jpeg'),{GEMINI_API_KEY:'g'},{prepareImage,sleep:async()=>{pauses++},fetchImpl:async()=>++calls<=4?fail(503):ok()});
+ const data=await readPassportAi(Buffer.from('jpeg'),{GEMINI_API_KEY:'g',GEMINI_MODEL:'a,b,c'},{prepareImage,sleep:async()=>{pauses++},fetchImpl:async()=>++calls<=4?fail(503):ok()});
  assert.equal(calls,5);assert.equal(pauses,1);assert.equal(data.lastName,'ERIKSSON');
 }));
 

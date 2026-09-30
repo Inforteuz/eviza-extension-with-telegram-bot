@@ -29,7 +29,7 @@
 | Токен бота | @BotFather → `/newbot` |
 | Telegram ID администраторов | @userinfobot |
 | Приём оплаты | @BotFather → бот → **Payments** → Click Uzbekistan / Payme → *provider token* (валюта UZS). Или только карта: `CARD_NUMBER` |
-| Ключ Gemini **или** OpenAI | Gemini: aistudio.google.com/apikey (модели `gemini-3.7-flash` → `3.6` → `3.5`). OpenAI: platform.openai.com (`gpt-4.1`) |
+| Ключ Gemini **или** OpenAI | Gemini: aistudio.google.com/apikey (модели `gemini-3.7-flash` → `3.8` → `3.6` → `3.5`, затем lite). OpenAI: platform.openai.com (`gpt-4.1`) |
 | Сервер с доменом | VPS с Docker. A-запись домена указывает на сервер |
 
 ## 2. Запуск сервера
@@ -104,11 +104,12 @@ npm start
 ```bash
 GEMINI_API_KEY=AIza...        # или AQ...; ключ из aistudio.google.com/apikey
 GEMINI_THINKING=high          # high по умолчанию; medium | low | minimal | off
-# GEMINI_MODEL=gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash   # порядок по умолчанию
+# GEMINI_MODEL=gemini-3.7-flash,gemini-3.8-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-flash-lite-latest,gemini-3.1-flash-lite
 ```
 
 * Запрос идёт в `generativelanguage.googleapis.com` (`generateContent`, ключ в заголовке `x-goog-api-key`), ответ строго по JSON-схеме.
-* Автопереключение: при 503/500/429/404 сразу берётся следующая модель списка; до трёх кругов с паузой 2–4 с. Ответившая модель становится первой на 10 минут, потом снова пробуется 3.7. Весь цикл укладывается в 100 с (расширение ждёт 120 с).
+* Автопереключение: при 503/500/429/404 или таймауте сразу берётся следующая модель, а занятая модель на 3 минуты уходит в конец списка. Если модель молчит 12 с, параллельно запускается следующая (не больше двух одновременно), побеждает первый корректный ответ. Ответившая модель остаётся первой на 10 минут. Весь цикл (до трёх кругов) укладывается в 100 с, а расширение ждёт 120 с.
+* Lite-модели в конце списка — запасной вариант на время «high demand» у больших flash-моделей: поля они читают так же, но MRZ чаще помечают как непроверенную. Pro-модели на бесплатном тарифе недоступны (429).
 * Если модель не поддерживает `thinkingLevel`, запрос повторяется без него.
 * Операторы видят только нейтральные сообщения («Tizim paketi hozir band…»); подробности (модель, код, текст ошибки) — в `docker compose logs server`.
 * Если заданы оба ключа, используется OpenAI; выбрать явно: `AI_PROVIDER=gemini`.
@@ -127,7 +128,7 @@ docker compose logs --tail 20 server     # «AI: gemini», «OpenCV: OK»
 
 ```bash
 node extension/scripts/pack.mjs --server https://evisa.example.uz
-# → extension/dist/evisa-auto-filler-1.0.3.zip (адрес сервера уже вшит)
+# → extension/dist/evisa-auto-filler-1.0.4.zip (адрес сервера уже вшит)
 ```
 
 Архив загружается в Chrome Web Store (unlisted) или раздаётся напрямую. Ссылку на него укажите в `EXTENSION_URL`, чтобы бот показывал её пользователям.
@@ -206,7 +207,7 @@ e2e/                     браузерные тесты: Chromium + расши�
 npm ci --prefix server && npm ci --prefix e2e
 pip install -r server/requirements.txt   # OpenCV + NumPy < 2.4
 export PYTHON_BIN=python3                # Python с OpenCV (тесты изображений без него пропускаются)
-npm test                     # server (53) + extension (45) unit-тесты
+npm test                     # server (54) + extension (46) unit-тесты
 npm run test:e2e             # Chromium: привязка, чтение, Individual, Group ×3, вход, 1015
 ```
 

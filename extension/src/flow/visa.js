@@ -44,7 +44,16 @@ export async function pickDate(page,label,iso){
   await page.getByRole('link',{name:String(Number(day)),exact:true}).dispatchEvent('click');
   try{await page.waitForFunction(({label,expected})=>Array.from(document.querySelectorAll('input')).some(x=>x.value===expected&&Array.from(x.labels||[]).some(l=>l.textContent.trim().replace(/\*$/,'').trim()===label)),{label,expected},{timeout:1200})}catch{}
  }
- if(await field.inputValue()!==expected)throw new Attention('needs_review',label+' sanasi saytga saqlanmadi.');
+ if(await field.inputValue()!==expected)throw new Attention('needs_review',label+' sanasi saytga saqlanmadi.'+await calendarHint(page));
+}
+// Names the visible date widget so a screenshot of the error tells which picker the site uses.
+async function calendarHint(page){
+ try{
+  const snap=await page.snapshot?.();if(!snap)return '';
+  const widgets=(snap.widgets||[]).map(w=>w.tag+(w.id?'#'+w.id:'')+(w.cls?'.'+w.cls.split(/\s+/)[0]:'')).slice(0,3).join(', ');
+  const year=(snap.controls||[]).some(c=>c.label==='Change the year');
+  return ' (kalendar: '+(widgets||'ochilmadi')+(widgets&&!year?'; yil tanlovi topilmadi':'')+')';
+ }catch{return ''}
 }
 // OCR may preserve the document's uppercase country name. This changes only
 // the site's option label; it never changes the confirmed applicant record.
