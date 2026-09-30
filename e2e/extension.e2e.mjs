@@ -102,13 +102,18 @@ test('pair via Telegram, read passports, fill individual applications and a grou
  await panel.click('#confirmAllBtn');
  await waitFor(async()=>(await storage('applicants')).every(a=>a.status==='confirmed'),{label:'confirmation'});
  list=await storage('applicants');assert.equal(list[0].data.profession,'None');
- const saudi=await f.context.newPage();await saudi.goto('https://visa.visitsaudi.com/Visa/Index');await saudi.bringToFront();
+ const saudi=await f.context.newPage();
+ // As in real use the side panel keeps the window focus, so the browser's own focus events never reach
+ // the page (headless Chromium would deliver them); the date pickers open on focus.
+ await saudi.addInitScript(()=>window.addEventListener('focus',e=>{if(e.isTrusted&&e.target!==window)e.stopImmediatePropagation()},true));
+ await saudi.goto('https://visa.visitsaudi.com/Visa/Index');await saudi.bringToFront();
  await panel.click('#startBtn');
  await waitFor(async()=>(await storage('run'))?.state==='waiting',{label:'first applicant ready',timeout:90000});
  list=await storage('applicants');
  assert.equal(list[0].status,'payment_ready');assert.equal(list[1].status,'confirmed');
  assert.match(saudi.url(),/\/Visa\/Review\//);
  const first=[...mock.site.apps.values()][0];
+ assert.equal(first.personal.BirthDatePicked,'1','birth date chosen in the calendar');assert.equal(first.passport.ExpiryDatePicked,'1','passport dates too');
  assert.equal(first.personal.FirstName,'ALISHER');assert.equal(first.personal.Nationality,'Uzbekistan');assert.equal(first.personal.BirthDate,'14/03/1985');
  assert.equal(first.passport.PassportNo,'FA1234567');assert.equal(first.passport.Purpose,'Umrah');assert.equal(first.passport.HotelName,'Al Jabriy');
  assert.ok(first.portrait.jpeg&&first.portrait.size>5000,'portrait uploaded');

@@ -3,11 +3,12 @@
 import {randomUUID} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 
-// Date fields on the real site are readonly jQuery UI datepickers that open on focus.
-// The mock uses the hardest variant: short month names and a narrow, re-centred year list.
-const assets={'/__assets/jquery.js':readFileSync(new URL('./node_modules/jquery/dist/jquery.min.js',import.meta.url)),'/__assets/jquery-ui.js':readFileSync(new URL('./node_modules/jquery-ui/dist/jquery-ui.min.js',import.meta.url))};
-const datepicker=`<script src="/__assets/jquery.js"></script><script src="/__assets/jquery-ui.js"></script><script>$(function(){$('input.date').datepicker({dateFormat:'dd/mm/yy',changeMonth:true,changeYear:true,yearRange:'c-10:c+10',selectMonthLabel:'Change the month',selectYearLabel:'Change the year'})})</script>`;
-
+// Date fields on the real site are readonly jQuery Datepick (Keith Wood) pickers that open on
+// focus: class is-datepick, popup .datepick-popup, month/year selects titled "Change the month/year".
+// The mock uses its default narrow year list (c-10:c+10), which has to be stepped through.
+const asset=file=>readFileSync(new URL('./node_modules/'+file,import.meta.url));
+const assets={'/__assets/jquery.js':asset('jquery/dist/jquery.min.js'),'/__assets/jquery.plugin.js':asset('kbw-datepick/dist/js/jquery.plugin.min.js'),'/__assets/jquery.datepick.js':asset('kbw-datepick/dist/js/jquery.datepick.js')};
+const datepicker=`<script src="/__assets/jquery.js"></script><script src="/__assets/jquery.plugin.js"></script><script src="/__assets/jquery.datepick.js"></script><script>$(function(){$('input.date').datepick({dateFormat:'dd/mm/yyyy',onSelect:function(){$('#'+this.id+'Picked').val('1')}})})</script>`;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
 const page=(title,body)=>`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font:14px sans-serif;margin:20px}label{display:block;margin-top:6px}.fake-file{opacity:0;position:absolute;width:1px}</style></head><body><h1>${esc(title)}</h1>${body}${body.includes('class="date"')?datepicker:''}</body></html>`;
 const options=(list,sel='')=>['<option value="">Select</option>',...list.map(o=>`<option value="${esc(o)}"${o===sel?' selected':''}>${esc(o)}</option>`)].join('');
@@ -15,7 +16,8 @@ const countries=['Kazakhstan','Russia','Saudi Arabia','Turkey','Uzbekistan'];
 const iso=v=>{const m=String(v||'').match(/^(\d{2})\/(\d{2})\/(\d{4})$/);return m?`${m[3]}-${m[2]}-${m[1]}`:''};
 const dmy=v=>v?v.split('-').reverse().join('/'):'';
 const text=(label,name,value='')=>`<label for="${name}">${esc(label)} <span class="req">*</span></label><input type="text" id="${name}" name="${name}" value="${esc(value)}">`;
-const date=(label,name)=>`<label for="${name}">${esc(label)} <span class="req">*</span></label><input type="text" class="date" readonly id="${name}" name="${name}" value="">`;
+// <name>Picked records that the date came through the calendar (onSelect), not the typed-input fallback.
+const date=(label,name)=>`<label for="${name}">${esc(label)} <span class="req">*</span></label><input type="text" class="date" readonly id="${name}" name="${name}" value=""><input type="hidden" id="${name}Picked" name="${name}Picked" value="">`;
 const select=(label,name,list)=>`<label for="${name}">${esc(label)} <span>*</span></label><select id="${name}" name="${name}">${options(list)}</select>`;
 
 function parseMultipart(buffer,contentType){

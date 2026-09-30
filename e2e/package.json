@@ -7,7 +7,7 @@
   },
   "devDependencies": {
     "jquery": "3.7.1",
-    "jquery-ui": "1.14.1",
+    "kbw-datepick": "5.1.1",
     "playwright-core": "1.56.1"
   }
 }

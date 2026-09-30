@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "eVisa Auto-Filler",
   "short_name": "eVisa",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Saudi eVisa arizalarini pasport rasmidan to‘lov sahifasigacha avtomatik to‘ldiradi. Telegram bot orqali ulanadi.",
   "minimum_chrome_version": "116",
   "permissions": ["storage", "unlimitedStorage", "sidePanel", "scripting"],

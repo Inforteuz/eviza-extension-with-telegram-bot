@@ -5,6 +5,8 @@
  const ORIGIN='https://visa.visitsaudi.com';
  const allowedPath=/^\/(Visa\/(Index|PersonalInfo|PassportInfo|Terms|Review)(\/|$)|Insurance\/ChooseInsurance\/|Login(\/|$))/;
  const roleSelectors={textbox:'input:not([type]),input[type=text],input[type=email],input[type=tel],input[type=number],input[type=search],textarea',combobox:'select',checkbox:'input[type=checkbox]',radio:'input[type=radio]',button:'button,input[type=submit],input[type=button],[role=button]',link:'a[href],a[role=button]'};
+ const datePopups='#ui-datepicker-div,.datepick-popup';
+ const datePicker='.is-datepick,.hasDatepicker';
  const addMember=/^\+?\s*(?:save\s*(?:&|and)\s*)?add\s+(?:(?:another|new|more)\s+)?(?:person|applicant|member)\s*\+?$/i;
  const fail=(message,code)=>Object.assign(Error(message),code?{code}:{});
  const clean=s=>String(s||'').replace(/\s+/g,' ').trim().replace(/\s*\*$/,'').trim();
@@ -49,7 +51,7 @@
    const u=new URL(command.target);if(u.origin!==ORIGIN||!allowedPath.test(u.pathname))throw fail('Sahifa manzili noto‘g‘ri.');
    return {value:true,navigate:command.target};
   }
-  if(command.action==='snapshot')return {value:{text:text(document.body).slice(0,40000),controls:Array.from(document.querySelectorAll('input,select,textarea,button,a')).filter(e=>own(e)&&visible(e)&&!['hidden','password'].includes(e.type)).map(e=>({tag:e.tagName.toLowerCase(),id:e.id,type:e.type||'',label:name(e),text:/^(BUTTON|A)$/.test(e.tagName)?clean(e.innerText):'',required:!!e.required,...(e.tagName==='A'&&e.getAttribute('href')?.startsWith('/')?{href:e.getAttribute('href')}:{}),...(e.tagName==='SELECT'?{options:Array.from(e.options).map(o=>({label:o.text,value:o.value}))}:{}),...(['checkbox','radio'].includes(e.type)?{checked:e.checked}:{})})),widgets:Array.from(document.querySelectorAll('[class*="datepick" i],[id*="datepick" i],[class*="calendar" i],[class*="flatpickr" i]')).filter(e=>own(e)&&visible(e)).slice(0,6).map(e=>({tag:e.tagName.toLowerCase(),id:e.id,cls:String(e.className).slice(0,80)}))}};
+  if(command.action==='snapshot')return {value:{text:text(document.body).slice(0,40000),controls:Array.from(document.querySelectorAll('input,select,textarea,button,a')).filter(e=>own(e)&&visible(e)&&!['hidden','password'].includes(e.type)).map(e=>({tag:e.tagName.toLowerCase(),id:e.id,type:e.type||'',label:name(e),text:/^(BUTTON|A)$/.test(e.tagName)?clean(e.innerText):'',required:!!e.required,...(e.tagName==='A'&&e.getAttribute('href')?.startsWith('/')?{href:e.getAttribute('href')}:{}),...(e.tagName==='SELECT'?{options:Array.from(e.options).map(o=>({label:o.text,value:o.value}))}:{}),...(['checkbox','radio'].includes(e.type)?{checked:e.checked}:{})})),widgets:Array.from(document.querySelectorAll('[class*="datepick" i],[id*="datepick" i],[class*="calendar" i],[class*="flatpickr" i],[class*="gj-" i]')).filter(e=>own(e)&&visible(e)).slice(0,6).map(e=>({tag:e.tagName.toLowerCase(),id:e.id,cls:String(e.className).split(/\s+/).filter(c=>/datepick|calendar|flatpickr|gj-/i.test(c)).join('.')||String(e.className).split(/\s+/)[0]}))}};
   if(command.action!=='element'||!Array.isArray(command.selector))throw fail('Amal qo‘llanmagan.');
   const elements=all(command.selector),op=command.operation;
   if(op==='count')return {value:elements.length};
@@ -67,6 +69,15 @@
    if(!e.matches(roleSelectors.textbox)||e.readOnly)throw fail('Maydon yozish uchun ochiq emas.');
    e.focus();if(op==='fill')setValue(String(command.value));else for(const char of String(command.value)){e.dispatchEvent(new KeyboardEvent('keydown',{key:char,bubbles:true}));e.dispatchEvent(new KeyboardEvent('keypress',{key:char,bubbles:true}));setValue(e.value+char);e.dispatchEvent(new InputEvent('input',{data:char,inputType:'insertText',bubbles:true}));e.dispatchEvent(new KeyboardEvent('keyup',{key:char,bubbles:true}))}change();return {value:true};
   }
+  // Last resort when a date picker never opens: write the date the way the picker's own
+  // keyup parser reads typed input. Only for picker fields and a dd/mm/yyyy value.
+  if(op==='date'){
+   if(!e.matches(roleSelectors.textbox)||!e.matches(datePicker))throw fail('Sana maydoni emas.');
+   if(!/^\d{2}\/\d{2}\/\d{4}$/.test(String(command.value)))throw fail('Sana formati noto‘g‘ri.');
+   setValue(String(command.value));
+   for(const type of ['keydown','keyup'])e.dispatchEvent(new KeyboardEvent(type,{key:'Unidentified',bubbles:true}));
+   change();return {value:e.value};
+  }
   if(op==='press'){if(command.value!=='Tab')throw fail('Tugma qo‘llanmagan.');e.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true}));e.blur();e.dispatchEvent(new KeyboardEvent('keyup',{key:'Tab',bubbles:true}));return {value:true}}
   if(op==='select'){if(e.tagName!=='SELECT')throw fail('Tanlov maydoni emas.');const options=Array.from(e.options).filter(o=>clean(o.text)===clean(command.value));if(options.length!==1)throw fail('Kerakli tanlov topilmadi: '+clean(command.value),'option_not_found');e.value=options[0].value;change();return {value:true}}
   if(op==='portrait'){
@@ -77,11 +88,17 @@
   if(op==='click'){
    const n=name(e)||clean(e.textContent),everything=[n,clean(e.textContent),clean(e.value),e.id].join(' ');
    if(e.id==='btnPay'||/payment|\bpay\b|checkout/i.test(everything))throw fail('To‘lovni faqat operator bajaradi.','payment');
-   const choice=['radio','checkbox'].includes(e.type),calendar=e.matches('a')&&!!e.closest('#ui-datepicker-div')&&/^\d{1,2}$/.test(n),field=e.matches(roleSelectors.textbox),allowed=['btnApplyGroupVisa','btnCreateGroup'].includes(e.id)||/^(Next|Apply For Individual)$/i.test(n)||addMember.test(n);
+   const choice=['radio','checkbox'].includes(e.type),calendar=e.matches('a')&&!!e.closest(datePopups)&&/^\d{1,2}$/.test(n),field=e.matches(roleSelectors.textbox),allowed=['btnApplyGroupVisa','btnCreateGroup'].includes(e.id)||/^(Next|Apply For Individual)$/i.test(n)||addMember.test(n);
    if(!choice&&!calendar&&!field&&!allowed)throw fail('Bu tugma avtomatik bosilmaydi.','forbidden');
    if(e.matches('a[href]')&&e.getAttribute('href')!=='#'&&!e.getAttribute('href').startsWith('javascript:')){const u=new URL(e.href);if(u.origin!==location.origin)throw fail('Tashqi havola ochilmaydi.')}
-   // A real click focuses a field first; the site's date pickers open on focus (the inputs are readonly).
-   if(field){const mouse=type=>e.dispatchEvent(new MouseEvent(type,{bubbles:true,cancelable:true,view:window}));mouse('mousedown');e.focus();mouse('mouseup');e.click();return {value:true}}
+   // A real click focuses a field first; the site's date pickers (jQuery Datepick) open on focus.
+   // While the side panel holds the window focus the browser fires no focus event on the page, so send
+   // one as well (an already open picker ignores the second one).
+   if(field){
+    const mouse=type=>e.dispatchEvent(new MouseEvent(type,{bubbles:true,cancelable:true,view:window}));
+    mouse('mousedown');e.focus();e.dispatchEvent(new FocusEvent('focus'));e.dispatchEvent(new FocusEvent('focusin',{bubbles:true}));
+    mouse('mouseup');e.click();return {value:true};
+   }
    if(choice||calendar){e.click();return {value:true}}
    if(!visible(e))throw fail('Tugma ko‘rinmayapti.');return {value:true,click:e};
   }

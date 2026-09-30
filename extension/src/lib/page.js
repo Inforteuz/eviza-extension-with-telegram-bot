@@ -91,7 +91,7 @@ class TabLocator {
  constructor(page,selector){this.page=page;this.selector=selector}
  locator(css){return new TabLocator(this.page,[...this.selector,{css}])}
  op(operation,value){return this.page.session.rpc('element',{selector:this.selector,operation,value})}
- fill(v){return this.op('fill',v)} pressSequentially(v){return this.op('type',v)} press(v){return this.op('press',v)} click(){return this.op('click')}
+ fill(v){return this.op('fill',v)} setDate(v){return this.op('date',v)} pressSequentially(v){return this.op('type',v)} press(v){return this.op('press',v)} click(){return this.op('click')}
  dispatchEvent(v){if(v!=='click')throw Error('Unsupported event.');return this.click()}
  selectOption(v){return this.op('select',v.label)} inputValue(){return this.op('value')} innerText(){return this.op('text')} isVisible(){return this.op('visible')} isEditable(){return this.op('editable')} isChecked(){return this.op('checked')} count(){return this.op('count')}
  async check(){if(!await this.isChecked())await this.click();if(!await this.isChecked())throw new Attention('needs_review','Saytdagi tanlov belgilanmadi.')}

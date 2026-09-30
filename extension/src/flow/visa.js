@@ -44,6 +44,8 @@ export async function pickDate(page,label,iso){
   await page.getByRole('link',{name:String(Number(day)),exact:true}).dispatchEvent('click');
   try{await page.waitForFunction(({label,expected})=>Array.from(document.querySelectorAll('input')).some(x=>x.value===expected&&Array.from(x.labels||[]).some(l=>l.textContent.trim().replace(/\*$/,'').trim()===label)),{label,expected},{timeout:1200})}catch{}
  }
+ // The calendar never opened: write the date the way the picker parses typed input.
+ if(await field.inputValue()!==expected&&field.setDate){try{await field.setDate(expected)}catch{/* reported below */}}
  if(await field.inputValue()!==expected)throw new Attention('needs_review',label+' sanasi saytga saqlanmadi.'+await calendarHint(page));
 }
 // Names the visible date widget so a screenshot of the error tells which picker the site uses.

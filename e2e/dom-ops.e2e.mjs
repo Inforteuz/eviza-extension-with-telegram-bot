@@ -12,6 +12,7 @@ const html=`<!doctype html><body>
 <label for="c1">City of Birth <span>*</span></label><input id="c1" value="ANDIJAN">
 <label for="c2">City <span>*</span></label><input id="c2" value="">
 <label for="d">Date of Birth</label><input id="d" readonly onfocus="this.dataset.opened='1'">
+<input id="dp" class="copy-01 is-datepick" readonly onkeyup="this.dataset.parsed=this.value">
 <div style="display:none"><button type="button">Next</button></div>
 <button type="submit">Next</button>
 <label for="g">Gender</label><select id="g"><option value="">Select</option><option>Male</option><option>Female</option></select>
@@ -41,6 +42,10 @@ test('DOM operations match Playwright-style names and refuse payment in a real p
  assert.equal((await el([{role:'combobox',name:'Gender',exact:true}],'select','Other')).code,'option_not_found');
  assert.equal((await el([{role:'textbox',name:'Date of Birth',exact:true}],'click')).value,true);
  assert.equal(await page.$eval('#d',i=>document.activeElement===i&&i.dataset.opened),'1','a click focuses the readonly date field (its calendar opens on focus)');
+ assert.equal((await el([{css:'#dp'}],'date','08/05/1971')).value,'08/05/1971','picker fallback writes the date');
+ assert.equal(await page.$eval('#dp',i=>i.dataset.parsed),'08/05/1971','and lets the picker parse it on keyup');
+ assert.equal((await el([{css:'#c2'}],'date','08/05/1971')).error,'Sana maydoni emas.','only for date picker fields');
+ assert.equal((await el([{css:'#dp'}],'date','1971-05-08')).error,'Sana formati noto‘g‘ri.');
  assert.equal((await el([{role:'textbox',name:'City',exact:true}],'type','Andijan')).value,true);
  assert.equal(await page.$eval('#c2',i=>i.value),'Andijan');
  assert.equal((await el([{role:'checkbox',name:{regex:'^I HAVE READ AND AGREE ALL THE ABOVE TERMS AND CONDITIONS\\.?$',flags:'i'}}],'click')).value,true);
