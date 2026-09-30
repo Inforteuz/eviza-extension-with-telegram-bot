@@ -2,6 +2,7 @@ import {fieldLabels,requiredApplicantFields} from '../lib/domain.js';
 import {statusLabels,displayName,lockedStatuses} from '../lib/applicants.js';
 import {putImage,deleteImages} from '../lib/images.js';
 import {MAX_FILES_PER_DROP,DEFAULT_SERVER_URL} from '../config.js';
+import {icon,hydrateIcons,setLabel} from '../lib/icons.js';
 
 const $=id=>document.getElementById(id);
 const KEYS=['auth','settings','applicants','run','log','pairing'];
@@ -98,25 +99,26 @@ async function renderList(){
     h('div',{class:'meta'},h('span',{class:`chip s-${a.status}`},statusLabels[a.status]||a.status),[a.data.passportNumber,a.data.birthDate].filter(Boolean).join(' · ')),
     h('div',{class:'note',title:describe(a)},describe(a))),
    h('div',{class:'actions'},
-    canConfirm&&h('button',{class:'icon-btn',type:'button',title:'Tasdiqlash',onclick:()=>send('applicant:save',{id:a.id,confirm:true}).then(()=>toast('Tasdiqlandi.')).catch(()=>{})},'✓'),
-    !locked&&h('button',{class:'icon-btn',type:'button',title:'Ko‘rish va tahrirlash',onclick:()=>openEditor(a.id)},'✎'),
-    attention&&a.confirmation&&!busy()&&h('button',{class:'icon-btn',type:'button',title:'Qayta urinish',onclick:()=>retry(a)},'↻'),
-    a.status==='payment_ready'&&!busy()&&h('button',{class:'icon-btn',type:'button',title:'Yangi ariza sifatida qayta to‘ldirish',onclick:()=>refill(a)},'⟲'),
-    !(a.status==='running')&&h('button',{class:'icon-btn',type:'button',title:'O‘chirish',onclick:()=>remove(a)},'✕')));
+    canConfirm&&h('button',{class:'icon-btn',type:'button',title:'Tasdiqlash','aria-label':'Tasdiqlash',onclick:()=>send('applicant:save',{id:a.id,confirm:true}).then(()=>toast('Tasdiqlandi.')).catch(()=>{})},icon('check')),
+    !locked&&h('button',{class:'icon-btn',type:'button',title:'Ko‘rish va tahrirlash','aria-label':'Ko‘rish va tahrirlash',onclick:()=>openEditor(a.id)},icon('edit')),
+    attention&&a.confirmation&&!busy()&&h('button',{class:'icon-btn',type:'button',title:'Qayta urinish','aria-label':'Qayta urinish',onclick:()=>retry(a)},icon('refresh')),
+    a.status==='payment_ready'&&!busy()&&h('button',{class:'icon-btn',type:'button',title:'Yangi ariza sifatida qayta to‘ldirish','aria-label':'Yangi ariza sifatida qayta to‘ldirish',onclick:()=>refill(a)},icon('refill')),
+    !(a.status==='running')&&h('button',{class:'icon-btn',type:'button',title:'O‘chirish','aria-label':'O‘chirish',onclick:()=>remove(a)},icon('close'))));
  }));
  if(token===listToken)ul.replaceChildren(...items);
 }
 function renderRun(){
  const run=state.run||{},p=run.progress||{done:0,total:0},list=state.applicants||[];
  $('progressBar').style.width=p.total?Math.round(p.done/p.total*100)+'%':'0%';
- const msg=$('runMessage');msg.textContent=run.message||(list.some(a=>a.status==='confirmed')?'Saudi saytiga kiring va ▶ Boshlash tugmasini bosing.':'Arizachilarni tasdiqlang.');
+ const msg=$('runMessage');msg.textContent=run.message||(list.some(a=>a.status==='confirmed')?'Saudi saytiga kiring va “Boshlash” tugmasini bosing.':'Arizachilarni tasdiqlang.');
  msg.className='run-message'+(run.state==='attention'?' attention':'');
  $('startBtn').hidden=busy();$('stopBtn').hidden=!busy();
- $('startBtn').textContent=['waiting','attention'].includes(run.state)||run.group?'▶ Davom etish':'▶ Boshlash';
+ setLabel($('startBtn'),['waiting','attention'].includes(run.state)||run.group?'Davom etish':'Boshlash');
  $('startBtn').disabled=!list.some(a=>a.status==='confirmed')&&!run.group;
  $('stopBtn').disabled=run.state==='stopping';
  $('clearBtn').disabled=busy()||!list.length;
- $('log').replaceChildren(...(state.log||[]).slice(-60).reverse().map(l=>h('li',{class:l.level},new Date(l.at).toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit'})+'  '+l.text)));
+ const logIcon={success:'checkCircle',warn:'alert',error:'alert'};
+ $('log').replaceChildren(...(state.log||[]).slice(-60).reverse().map(l=>h('li',{class:l.level},logIcon[l.level]&&icon(logIcon[l.level],13),new Date(l.at).toLocaleTimeString('uz-UZ',{hour:'2-digit',minute:'2-digit'})+'  '+l.text)));
 }
 
 // ---------- Editor ----------
@@ -201,7 +203,7 @@ function renderSettings(){
 function bind(){
  $('settingsBtn').onclick=()=>show(view==='settings'?'main':'settings');
  $('settingsBack').onclick=$('editorBack').onclick=()=>show('main');
- $('pairBtn').onclick=async()=>{try{const r=await send('auth:pair',{serverUrl:$('serverUrl').value});if(r?.botUrl)toast('Telegram’da “✅ Ulash”ni bosing.')}catch{}};
+ $('pairBtn').onclick=async()=>{try{const r=await send('auth:pair',{serverUrl:$('serverUrl').value});if(r?.botUrl)toast('Telegram’da “Ulash”ni bosing.')}catch{}};
  $('pairCancel').onclick=()=>send('auth:pair-cancel').catch(()=>{});
  $('tokenBtn').onclick=async()=>{try{await send('auth:token',{serverUrl:$('serverUrl').value,token:$('tokenInput').value});$('tokenInput').value='';toast('Ulandi.')}catch{}};
  $('refreshBtn').onclick=()=>send('auth:refresh').then(()=>toast('Balans yangilandi.')).catch(()=>{});
@@ -250,5 +252,5 @@ chrome.storage.onChanged.addListener((changes,area)=>{
  if(view==='editor'&&changes.applicants){const before=changes.applicants.oldValue?.find(a=>a.id===editingId),after=changes.applicants.newValue?.find(a=>a.id===editingId);if(!after){show('main');return}if(before?.status!==after.status||before?.portraitHash!==after.portraitHash)renderEditor();return}
  render();
 });
-bind();load();
+hydrateIcons();bind();load();
 send('auth:refresh',{},{quiet:true}).catch(()=>{});

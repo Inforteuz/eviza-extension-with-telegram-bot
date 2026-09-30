@@ -17,7 +17,9 @@
    overlay=document.createElement('aside');overlay.dataset.evisaScript='1';
    overlay.style.cssText='position:fixed;right:14px;bottom:14px;z-index:2147483647;width:280px;background:#fff;color:#12352f;border:2px solid #0c8571;border-radius:12px;padding:12px 14px;box-shadow:0 6px 24px #0003;font:13px/1.4 system-ui,sans-serif';
    const title=document.createElement('strong');title.textContent='eVisa Auto-Filler';title.style.display='block';
-   const close=document.createElement('button');close.type='button';close.textContent='×';close.setAttribute('aria-label','Yopish');
+   const close=document.createElement('button');close.type='button';const NS='http://www.w3.org/2000/svg',svg=document.createElementNS(NS,'svg'),path=document.createElementNS(NS,'path');
+   for(const [k,v] of Object.entries({viewBox:'0 0 24 24',width:'14',height:'14',fill:'none',stroke:'currentColor','stroke-width':'2.2','stroke-linecap':'round','aria-hidden':'true'}))svg.setAttribute(k,v);
+   path.setAttribute('d','M18 6 6 18M6 6l12 12');svg.append(path);close.append(svg);close.setAttribute('aria-label','Yopish');
    close.style.cssText='position:absolute;top:6px;right:8px;border:0;background:none;font:18px system-ui;color:#5f746f;cursor:pointer';
    close.onclick=()=>{overlay?.remove();overlay=null};
    const note=document.createElement('div');note.dataset.role='note';note.style.margin='6px 0 8px';

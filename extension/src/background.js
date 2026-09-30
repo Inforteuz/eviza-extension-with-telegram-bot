@@ -107,7 +107,7 @@ const handlers={
  'auth:pair-resume':async()=>pollPairing(),
  'auth:token':async({serverUrl,token:value})=>{
   const base=normalizeServerUrl(serverUrl);const t=String(value||'').trim();
-  if(!/^evx_[\w-]{43}$/.test(t))throw Error('Token noto‘g‘ri. Botdagi “🔑 Token olish” tugmasidan oling.');
+  if(!/^evx_[\w-]{43}$/.test(t))throw Error('Token noto‘g‘ri. Botdagi “Token olish” tugmasidan oling.');
   const {data}=await apiRequest(base,'/api/ext/me',{token:t});
   await store.set('settings',{...store.get('settings'),serverUrl:base});
   await store.set('auth',{serverUrl:base,token:t,account:data,checkedAt:Date.now()});await store.log('Token orqali ulandi.');

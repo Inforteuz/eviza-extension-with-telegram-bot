@@ -96,7 +96,7 @@ export class Runner {
     await flow.flush();
     await this.store.updateApplicant(a.id,x=>({status:'payment_ready',result:{...(x.result||{}),...result,readyAt:Date.now()}}));
     done++;await this.setRun({progress:{...this.run.progress,done}});
-    await this.store.log(`✅ ${displayName(a)}: to‘lovga tayyor (ariza ${result.applicationNumber}, ${result.paymentEvidence?.totalSAR||'?'} SAR).`);
+    await this.store.log(`${displayName(a)}: to‘lovga tayyor (ariza ${result.applicationNumber}, ${result.paymentEvidence?.totalSAR||'?'} SAR).`,'success');
     this.notify({id:'ready:'+a.id,type:'payment_ready',mode:'individual',count:1,totalSAR:result.paymentEvidence?.totalSAR||'',names:[displayName(a)]}).catch(()=>{});
     const more=(await this.eligible()).length>0;
     if(more&&this.store.get('settings').pauseAfterEach){
@@ -128,8 +128,8 @@ export class Runner {
    await flow.flush();await this.store.clearFlow(group.id);
    const cp=this.run.group.checkpoint||{};
    await this.store.mutate('applicants',list=>{for(const a of list)if(ids.includes(a.id)){a.status='payment_ready';a.result={...(a.result||{}),groupName:group.name,applicationNumber:cp.members?.[a.id]?.applicationNumber||'',paymentUrl:result.paymentUrl,totalSAR:result.paymentEvidence.totalSAR,readyAt:Date.now()}}});
-   await this.setRun({state:'done',group:null,lastGroup:{name:group.name,count:members.length,totalSAR:result.paymentEvidence.totalSAR},progress:{done:members.length,total:members.length},message:`✅ Guruh “${group.name}”: ${members.length} kishi to‘lovga tayyor. Jami ${result.paymentEvidence.totalSAR} SAR. To‘lovni o‘zingiz bajaring.`});
-   await this.store.log(this.run.message);
+   await this.setRun({state:'done',group:null,lastGroup:{name:group.name,count:members.length,totalSAR:result.paymentEvidence.totalSAR},progress:{done:members.length,total:members.length},message:`Guruh “${group.name}”: ${members.length} kishi to‘lovga tayyor. Jami ${result.paymentEvidence.totalSAR} SAR. To‘lovni o‘zingiz bajaring.`});
+   await this.store.log(this.run.message,'success');
    this.notify({id:'ready:'+group.id,type:'payment_ready',mode:'group',groupName:group.name,count:members.length,totalSAR:result.paymentEvidence.totalSAR,names:members.map(m=>[m.data.firstName,m.data.lastName].join(' '))}).catch(()=>{});
   }catch(error){
    await this.store.mutate('applicants',list=>{for(const a of list)if(ids.includes(a.id)&&a.status==='running')a.status='confirmed'});

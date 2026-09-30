@@ -9,7 +9,7 @@
 <body>
 <header class="top">
   <div class="brand"><img src="../../icons/icon32.png" alt=""><span>eVisa Auto-Filler</span></div>
-  <button class="icon-btn" id="settingsBtn" type="button" title="Sozlamalar" aria-label="Sozlamalar">⚙</button>
+  <button class="icon-btn" id="settingsBtn" type="button" title="Sozlamalar" aria-label="Sozlamalar" data-icon="settings" data-icon-size="18"></button>
 </header>
 
 <main>
@@ -21,12 +21,12 @@
       <label class="field"><span>Server manzili</span><input id="serverUrl" type="url" placeholder="https://evisa.example.uz" autocomplete="off"></label>
       <button class="btn primary wide" id="pairBtn" type="button">Telegram orqali ulash</button>
       <div id="pairingBox" class="notice" hidden>
-        Telegram’da bot ochildi. <b>“✅ Ulash”</b> tugmasini bosing — panel o‘zi yangilanadi.
+        Telegram’da bot ochildi. <b>“Ulash”</b> tugmasini bosing — panel o‘zi yangilanadi.
         <button class="link" id="pairCancel" type="button">Bekor qilish</button>
       </div>
       <details class="token-box">
         <summary>Token bilan ulash</summary>
-        <p class="muted small">Botdagi “🔌 Kengaytmani ulash” → “🔑 Token olish”.</p>
+        <p class="muted small">Botdagi “Kengaytmani ulash” → “Token olish”.</p>
         <label class="field"><input id="tokenInput" type="password" placeholder="evx_…" autocomplete="off"></label>
         <button class="btn wide" id="tokenBtn" type="button">Ulash</button>
       </details>
@@ -41,8 +41,8 @@
         <div class="acc-balance"><b id="accBalance">—</b> <span class="muted" id="accPrice"></span></div>
       </div>
       <div class="acc-actions">
-        <button class="btn small" id="topupBtn" type="button">➕ To‘ldirish</button>
-        <button class="icon-btn" id="refreshBtn" type="button" title="Yangilash" aria-label="Balansni yangilash">↻</button>
+        <button class="btn small" id="topupBtn" type="button" data-icon="plus">To‘ldirish</button>
+        <button class="icon-btn" id="refreshBtn" type="button" title="Yangilash" aria-label="Balansni yangilash" data-icon="refresh"></button>
       </div>
     </div>
 
@@ -57,7 +57,7 @@
 
     <label class="drop" id="drop">
       <input id="fileInput" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
-      <div class="drop-icon">⬆</div>
+      <div class="drop-icon" data-icon="upload" data-icon-size="26"></div>
       <div><b>Pasport rasmlarini shu yerga tashlang</b><br><span class="muted">yoki bosib tanlang · JPG/PNG · bir martada 25 tagacha</span></div>
       <div class="muted small" id="priceHint"></div>
     </label>
@@ -65,8 +65,8 @@
     <div class="toolbar">
       <span class="muted small" id="counts"></span>
       <span class="spacer"></span>
-      <button class="btn small ghost" id="manualBtn" type="button">＋ Qo‘lda</button>
-      <button class="btn small ghost" id="confirmAllBtn" type="button">✓ Barchasini tasdiqlash</button>
+      <button class="btn small ghost" id="manualBtn" type="button" data-icon="plus">Qo‘lda</button>
+      <button class="btn small ghost" id="confirmAllBtn" type="button" data-icon="check">Barchasini tasdiqlash</button>
     </div>
     <ul class="list" id="list"></ul>
     <p class="empty muted" id="emptyList">Hali arizachi yo‘q. Pasport rasmlarini yuklang.</p>
@@ -75,7 +75,7 @@
   <!-- Editor -->
   <section id="editorView" class="view" hidden>
     <div class="editor-head">
-      <button class="icon-btn" id="editorBack" type="button" aria-label="Orqaga">←</button>
+      <button class="icon-btn" id="editorBack" type="button" aria-label="Orqaga" data-icon="back" data-icon-size="18"></button>
       <h2 id="editorTitle">Arizachi</h2>
     </div>
     <div class="card pad portrait-edit">
@@ -99,7 +99,7 @@
   <!-- Settings -->
   <section id="settingsView" class="view" hidden>
     <div class="editor-head">
-      <button class="icon-btn" id="settingsBack" type="button" aria-label="Orqaga">←</button>
+      <button class="icon-btn" id="settingsBack" type="button" aria-label="Orqaga" data-icon="back" data-icon-size="18"></button>
       <h2>Sozlamalar</h2>
     </div>
     <form id="settingsForm" class="card pad" autocomplete="off">
@@ -126,9 +126,9 @@
   <div class="progress"><div class="bar" id="progressBar"></div></div>
   <div class="run-message" id="runMessage"></div>
   <div class="run-buttons">
-    <button class="btn primary" id="startBtn" type="button">▶ Boshlash</button>
-    <button class="btn danger" id="stopBtn" type="button" hidden>■ To‘xtatish</button>
-    <button class="btn ghost" id="clearBtn" type="button" title="Ro‘yxatni tozalash">🗑</button>
+    <button class="btn primary" id="startBtn" type="button" data-icon="play">Boshlash</button>
+    <button class="btn danger" id="stopBtn" type="button" hidden data-icon="stop">To‘xtatish</button>
+    <button class="btn ghost" id="clearBtn" type="button" title="Ro‘yxatni tozalash" aria-label="Ro‘yxatni tozalash" data-icon="trash"></button>
   </div>
   <details class="log"><summary>Jurnal</summary><ol id="log"></ol></details>
 </footer>
