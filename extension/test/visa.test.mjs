@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {waitForLogin,Attention,pickDate,setChoice,fillPassport,fillInsurance,fillTerms,verifyReview,paymentReady} from '../src/flow/visa.js';
+import {waitForLogin,waitAfterSubmit,Attention,pickDate,setChoice,fillPassport,fillInsurance,fillTerms,verifyReview,paymentReady} from '../src/flow/visa.js';
 import {visaDiagnostics} from '../src/flow/diagnostics.js';
 
 test('a queued job waits for manual login and continues without a second confirmation',async()=>{
@@ -68,6 +68,18 @@ test('calendar with short month names and a narrow year list steps to the wanted
  };
  await pickDate(page,'Date of Birth','1968-09-05');
  assert.equal(value,'05/09/1968');assert.deepEqual(picks,['2016','2006','1996','1986','1976','1968','Sep']);
+});
+
+test('after Next a same-URL reload or an active-visa message ends the wait at once',async()=>{
+ const url='https://visa.visitsaudi.com/Visa/PassportInfo/1';let doc='a',text='',polls=0;
+ const page={url:()=>url,documentId:()=>doc,locator:()=>({innerText:async()=>{polls++;return text}})};
+ let started=Date.now();setTimeout(()=>{doc='b'},30);
+ await waitAfterSubmit(page,url,{interval:10});assert.ok(Date.now()-started<1000,'reloaded document');
+ doc='c';started=Date.now();setTimeout(()=>{text='Sorry, you cannot create new visa request while your current visa 6174758631 is still valid for the same passport number, your current visa will expire on 30/09/2027'},30);
+ await waitAfterSubmit(page,url,{interval:10});assert.ok(Date.now()-started<1000,'message on the same page');
+ text='';await waitAfterSubmit(page,url,{interval:5,timeout:40});assert.ok(polls>2,'gives up after the timeout');
+ const stopped=Object.assign(new Attention('stopped','stop'),{stopped:true});
+ await assert.rejects(waitAfterSubmit({...page,locator:()=>({innerText:async()=>{throw stopped}})},url,{interval:5,timeout:100}),e=>e===stopped,'Stop is not swallowed');
 });
 
 test('custom choices toggle only when needed and reject an unaccepted change',async()=>{

@@ -1,4 +1,4 @@
-import {Attention,NAV_TIMEOUT,waitForLogin,fillPersonal,fillPassport,fillInsurance,fillTerms,activeVisaMessage,verifyApplicantReview} from './visa.js';
+import {Attention,NAV_TIMEOUT,waitAfterSubmit,waitForLogin,fillPersonal,fillPassport,fillInsurance,fillTerms,activeVisaMessage,verifyApplicantReview} from './visa.js';
 import {assertGroupName,addMemberControl,verifyGroupPayment} from './group-review.js';
 const ORIGIN='https://visa.visitsaudi.com';
 
@@ -65,8 +65,9 @@ export async function prepareGroup(page,group,state,{progress,checkpoint,portrai
    const text=await page.locator('body').innerText(),number=text.match(/Application No\.:\s*(\d+)/)?.[1];if(!number)throw new Attention('needs_review','Guruh arizachisining rasmiy raqami o‘qilmadi.','passport');
    const visaId=new URL(page.url()).pathname.split('/').at(-1);if(!/^[a-f0-9-]{36}$/i.test(visaId)||saved.visaId&&saved.visaId!==visaId)throw new Attention('needs_review','Guruhdagi rasmiy arizachi raqami mos kelmadi.','passport');
    Object.assign(saved,{phase:'passport',currentUrl:page.url(),applicationNumber:number,visaId});cp.currentUrl=page.url();cp.members[member.id]=saved;await checkpoint(cp);
+   await progress({step:'passport',note:`${i+1}/${group.members.length}: ${member.data.firstName} pasport ma’lumotlari kiritilmoqda.`});
    await fillPassport(page,member.data);const before=page.url();await page.getByRole('button',{name:'Next',exact:true}).click();
-   try{await page.waitForURL(url=>url.href!==before,{timeout:NAV_TIMEOUT,waitUntil:'domcontentloaded'})}catch{}
+   await waitAfterSubmit(page,before);
    const blocking=activeVisaMessage(await page.locator('body').innerText());if(blocking)throw new Attention('needs_review',member.data.firstName+': '+blocking,'passport');
    if(page.url()===before){state.set('group-report:'+group.id,JSON.stringify(await observeGroup(page)));throw new Attention('needs_review','Guruhdagi pasport formasi keyingi bosqichga o‘tmadi.','passport');}
    Object.assign(saved,{phase:'insurance',currentUrl:page.url()});cp.currentUrl=page.url();await checkpoint(cp);

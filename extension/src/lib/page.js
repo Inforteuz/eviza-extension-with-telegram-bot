@@ -72,6 +72,7 @@ function matchUrl(target,url){if(typeof target==='function')return target(new UR
 export class TabPage {
  constructor(session){this.session=session;this.manualLogin=true}
  url(){return this.session.peer?.url||ORIGIN+'/Visa/Index'}
+ documentId(){return this.session.peer?.documentId||''}
  async goto(target){
   if(!allowedScriptUrl(target))throw new Attention('needs_review','Bu manzil avtomatik ochilmaydi.');
   if(this.session.isStopped())throw stoppedError();

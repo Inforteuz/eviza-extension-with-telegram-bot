@@ -41,7 +41,7 @@ const parseForm=request=>{
 
 export function createMockSaudi(){
  // latency: {path: ms} delays page loads like the real site (a click only starts the navigation).
- const site={loggedIn:true,apps:new Map(),groups:new Map(),payClicks:0,next:260929000,posts:[],rateLimited:false,latency:{}};
+ const site={loggedIn:true,apps:new Map(),groups:new Map(),payClicks:0,next:260929000,posts:[],rateLimited:false,latency:{},activeVisa:new Map()};
  const groupHeader=g=>g?`<p>Group Name : ${esc(g)}</p>`:'';
  const reviewLines=a=>{
   const p=a.personal,q=a.passport;
@@ -112,6 +112,8 @@ ${a.group?`<a id="btnAddMoreToGroup" href="/Visa/PersonalInfo?gName=${encodeURIC
   const {fields}=parseForm(request);site.posts.push({path,fields});
   if(kind==='PassportInfo'){
    if(!fields.PassportNo||!fields.Purpose||fields.EmailNotify!=='no'||fields.WhatsApp!=='no')return route.fulfill(html(routes.passport(a).replace('<form','<p class="error">Required.</p><form')));
+   // The real site answers on the same URL when the passport already has a valid visa.
+   if(site.activeVisa.has(fields.PassportNo))return route.fulfill(html(routes.passport(a).replace('<form',`<p class="error">Sorry, you cannot create new visa request while your current visa 6174758631 is still valid for the same passport number, your current visa will expire on ${site.activeVisa.get(fields.PassportNo)}</p><form`)));
    a.passport=fields;a.stage='insurance';return route.fulfill(redirect('/Insurance/ChooseInsurance/'+a.id));
   }
   if(kind==='ChooseInsurance'){if(fields.Insurance!=='1')return route.fulfill(html(routes.insurance(a)));a.stage='terms';return route.fulfill(redirect('/Visa/Terms/'+a.id))}

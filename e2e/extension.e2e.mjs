@@ -192,4 +192,13 @@ test('a signed-out operator is asked to log in and the run continues after login
  await waitFor(async()=>(await storage('run'))?.state==='attention',{label:'rate limit stop'});
  assert.match((await storage('run')).message,/1015\/429/);
  assert.equal((await storage('applicants')).find(a=>a.id===id).status,'confirmed');
+
+ // A passport with a valid visa: the site reloads the passport form with a message; stop at once.
+ mock.site.rateLimited=false;
+ mock.site.activeVisa.set((await storage('applicants'))[0].data.passportNumber,'30/09/2027');
+ await saudi.goto('https://visa.visitsaudi.com/Visa/Index');
+ const started=Date.now();await panel.click('#startBtn');
+ await waitFor(async()=>/amaldagi vizasi 30\/09\/2027 gacha/.test((await storage('run'))?.message||''),{label:'active visa stop',timeout:90000});
+ assert.equal((await storage('run')).state,'attention');
+ assert.ok(Date.now()-started<40000,'no 45 s wait after the message: '+(Date.now()-started)+' ms');
 });

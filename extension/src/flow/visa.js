@@ -111,6 +111,16 @@ export async function fillPassport(page,a){
  for(const [label,key] of [['Passport No.','passportNumber'],['Passport Issue Place (Country or City)','passportIssuePlace'],...(a.accommodationType==='Hotel'?[['Name of Hotel','accommodationName']]:[])])if(await page.getByRole('textbox',{name:label,exact:true}).inputValue()!==a[key])throw new Attention('needs_review',label+' qiymati saytga saqlanmadi.','passport');
  for(const [label,key] of [['Passport Issue Date','issueDate'],['Passport Expiry Date','expiryDate'],['Expected Date of Arrival','travelDate'],['Expected Date of Departure','departureDate']])if(await page.getByRole('textbox',{name:label,exact:true}).inputValue()!==a[key].split('-').reverse().join('/'))throw new Attention('needs_review',label+' qiymati saytga saqlanmadi.','passport');
 }
+// After Next the site either opens the next step or reloads the same form with a message
+// (an active visa for this passport, a field error). Stop waiting as soon as either happens.
+export async function waitAfterSubmit(page,before,{timeout=NAV_TIMEOUT,interval=1500}={}){
+ const doc=page.documentId?.(),start=Date.now();
+ while(Date.now()-start<timeout){
+  if(page.url()!==before||(doc&&page.documentId()!==doc))return;
+  try{if(activeVisaMessage(await page.locator('body').innerText()))return}catch(error){if(error.stopped)throw error}
+  await new Promise(r=>setTimeout(r,interval));
+ }
+}
 export function activeVisaMessage(text){
  const match=text.match(/cannot create new visa request while your current visa\s+\d+\s+is still valid for the same passport number, your current visa will expire on\s+(\d{2}\/\d{2}\/\d{4})/i);
  return match?'Bu pasportning amaldagi vizasi '+match[1]+' gacha. Saudi sayti yangi arizaga ruxsat bermadi.':'';
@@ -214,8 +224,9 @@ export async function prepareVisa(page,job,portraitPath,state,checkpoint,onProgr
   const body=await page.locator('body').innerText();const applicationNumber=body.match(/Application No\.:\s*(\d+)/)?.[1];
   if(!applicationNumber||!validDraft(page.url()))throw new Attention('needs_review','Rasmiy qoralama raqami o‘qilmadi.','passport');
   const progress={officialUrl:page.url(),applicationNumber,step:'passport'};state.set('draft:'+job.id,JSON.stringify(progress));await checkpoint(progress);
+  await onProgress({step:'passport',note:'Pasport va safar ma’lumotlari kiritilmoqda.'});
   await fillPassport(page,job.data);const passportUrl=page.url();await page.getByRole('button',{name:'Next',exact:true}).click();
-  try{await page.waitForURL(url=>url.href!==passportUrl,{timeout:NAV_TIMEOUT,waitUntil:'domcontentloaded'})}catch{}
+  await waitAfterSubmit(page,passportUrl);
   const blocking=activeVisaMessage(await page.locator('body').innerText());if(blocking)throw new Attention('needs_review',blocking,'passport');
   if(new URL(page.url()).origin===ORIGIN)state.set('next-route:'+job.id,new URL(page.url()).pathname);
   if(remainingPattern.test(new URL(page.url()).pathname))return finishApplication();
